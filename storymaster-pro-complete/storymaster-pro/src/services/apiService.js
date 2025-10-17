@@ -31,7 +31,7 @@ export const getApiSettings = () => {
     provider: API_PROVIDERS.OPENROUTER,
     model: 'x-ai/grok-2-1212',
     temperature: 0.8,
-    maxTokens: 4000
+    maxTokens: 8000
   }
 }
 
@@ -79,7 +79,7 @@ const generateWithOpenRouter = async (apiKey, model, messages, options = {}) => 
         model: model,
         messages: messages,
         temperature: options.temperature || 0.8,
-        max_tokens: options.maxTokens || 4000,
+        max_tokens: options.maxTokens,
         stream: false
       })
     })
@@ -115,7 +115,7 @@ const generateWithGoogle = async (apiKey, model, messages, options = {}) => {
         contents: contents,
         generationConfig: {
           temperature: options.temperature || 0.8,
-          maxOutputTokens: options.maxTokens || 4000
+          maxOutputTokens: options.maxTokens
         }
       })
     })
@@ -145,7 +145,7 @@ const generateWithDeepSeek = async (apiKey, model, messages, options = {}) => {
         model: model,
         messages: messages,
         temperature: options.temperature || 0.8,
-        max_tokens: options.maxTokens || 4000
+        max_tokens: options.maxTokens
       })
     })
 
@@ -174,7 +174,7 @@ const generateWithMistral = async (apiKey, model, messages, options = {}) => {
         model: model,
         messages: messages,
         temperature: options.temperature || 0.8,
-        max_tokens: options.maxTokens || 4000
+        max_tokens: options.maxTokens
       })
     })
 
@@ -200,7 +200,7 @@ export const generateText = async (messages, options = {}) => {
   const apiKey = apiKeys[provider]
 
   if (!apiKey) {
-    throw new Error(`No API key found for provider: ${provider}`)
+    throw new Error(`No API key found for provider: ${provider}. Please add your API key in the settings.`);
   }
 
   const genOptions = {
