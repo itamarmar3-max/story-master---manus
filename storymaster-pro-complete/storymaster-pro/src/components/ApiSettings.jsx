@@ -260,7 +260,7 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
           </div>
 
           {/* Advanced Settings */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <div className="space-y-2">
               <Label className="text-white">{t.temperature}</Label>
               <Input
@@ -270,17 +270,6 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
                 step="0.1"
                 value={settings.temperature || 0.8}
                 onChange={(e) => setSettings({ ...settings, temperature: parseFloat(e.target.value) })}
-                className="bg-white/5 border-white/10 text-white"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-white">{t.maxTokens}</Label>
-              <Input
-                type="number"
-                min="1000"
-                step="1000"
-                value={settings.maxTokens || 4000}
-                onChange={(e) => setSettings({ ...settings, maxTokens: parseInt(e.target.value) })}
                 className="bg-white/5 border-white/10 text-white"
               />
             </div>

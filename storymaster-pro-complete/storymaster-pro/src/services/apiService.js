@@ -30,8 +30,7 @@ export const getApiSettings = () => {
   return settings ? JSON.parse(settings) : {
     provider: API_PROVIDERS.OPENROUTER,
     model: 'x-ai/grok-2-1212',
-    temperature: 0.8,
-    maxTokens: 8000
+    temperature: 0.8
   }
 }
 
@@ -79,7 +78,6 @@ const generateWithOpenRouter = async (apiKey, model, messages, options = {}) => 
         model: model,
         messages: messages,
         temperature: options.temperature || 0.8,
-        max_tokens: options.maxTokens,
         stream: false
       })
     })
@@ -114,8 +112,7 @@ const generateWithGoogle = async (apiKey, model, messages, options = {}) => {
       body: JSON.stringify({
         contents: contents,
         generationConfig: {
-          temperature: options.temperature || 0.8,
-          maxOutputTokens: options.maxTokens
+          temperature: options.temperature || 0.8
         }
       })
     })
@@ -144,8 +141,7 @@ const generateWithDeepSeek = async (apiKey, model, messages, options = {}) => {
       body: JSON.stringify({
         model: model,
         messages: messages,
-        temperature: options.temperature || 0.8,
-        max_tokens: options.maxTokens
+        temperature: options.temperature || 0.8
       })
     })
 
@@ -173,8 +169,7 @@ const generateWithMistral = async (apiKey, model, messages, options = {}) => {
       body: JSON.stringify({
         model: model,
         messages: messages,
-        temperature: options.temperature || 0.8,
-        max_tokens: options.maxTokens
+        temperature: options.temperature || 0.8
       })
     })
 
@@ -204,8 +199,7 @@ export const generateText = async (messages, options = {}) => {
   }
 
   const genOptions = {
-    temperature: options.temperature || settings.temperature,
-    maxTokens: options.maxTokens || settings.maxTokens
+    temperature: options.temperature || settings.temperature
   }
 
   switch (provider) {

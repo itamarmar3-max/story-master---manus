@@ -50,8 +50,8 @@ Return ONLY valid JSON, no additional text.`
   try {
     return JSON.parse(response)
   } catch (error) {
-    console.error('Failed to parse blueprint JSON:', error)
-    throw new Error('Invalid blueprint format from AI')
+    console.error('Failed to parse blueprint JSON:', response)
+    throw new Error(`Invalid blueprint format from AI: ${response}`)
   }
 }
 
@@ -117,8 +117,8 @@ Return ONLY valid JSON.`
   try {
     return JSON.parse(response)
   } catch (error) {
-    console.error('Failed to parse characters JSON:', error)
-    throw new Error('Invalid characters format from AI')
+    console.error('Failed to parse characters JSON:', response)
+    throw new Error(`Invalid characters format from AI: ${response}`)
   }
 }
 
@@ -170,8 +170,8 @@ Return ONLY valid JSON.`
   try {
     return JSON.parse(response)
   } catch (error) {
-    console.error('Failed to parse scaffold JSON:', error)
-    throw new Error('Invalid scaffold format from AI')
+    console.error('Failed to parse scaffold JSON:', response)
+    throw new Error(`Invalid scaffold format from AI: ${response}`)
   }
 }
 
@@ -203,6 +203,19 @@ Return the chapter text directly, no JSON wrapper.`
 
   const messages = [{ role: 'user', content: prompt }]
   return await generateWithRetry(messages, { ...options, temperature: 0.9 })
+}
+
+// Step 5: Summarize Chapter
+export const summarizeChapter = async (chapterContent, options = {}) => {
+  const prompt = `You are a summarization AI. Condense the following chapter into a concise summary (2-3 paragraphs) that captures the key plot points, character developments, and critical information needed for future chapters.
+
+CHAPTER CONTENT:
+"${chapterContent}"
+
+Return only the summary text.`
+
+  const messages = [{ role: 'user', content: prompt }]
+  return await generateWithRetry(messages, { ...options, temperature: 0.5 })
 }
 
 // Helper: Get pacing guidance
@@ -263,35 +276,49 @@ export const generateFullStory = async (premise, config, onProgress) => {
     }
     
     // Step 4: Generate chapters
-    const totalChapters = 15
-    const chapters = []
-    const beatsPerChapter = Math.ceil(scaffold.beats.length / totalChapters)
-    
+    const totalChapters = 15;
+    const chapters = [];
+    const chapterSummaries = [];
+    const beatsPerChapter = Math.ceil(scaffold.beats.length / totalChapters);
+
     for (let i = 0; i < totalChapters; i++) {
-      const chapterNumber = i + 1
-      const startBeat = i * beatsPerChapter
-      const endBeat = Math.min((i + 1) * beatsPerChapter, scaffold.beats.length)
-      const chapterBeats = scaffold.beats.slice(startBeat, endBeat)
-      
-      onProgress({ 
-        stage: 'generation', 
-        progress: 30 + ((chapterNumber / totalChapters) * 70), 
+      const chapterNumber = i + 1;
+      const startBeat = i * beatsPerChapter;
+      const endBeat = Math.min((i + 1) * beatsPerChapter, scaffold.beats.length);
+      const chapterBeats = scaffold.beats.slice(startBeat, endBeat);
+
+      onProgress({
+        stage: 'generation',
+        progress: 30 + ((chapterNumber / totalChapters) * 70),
         message: `Writing Chapter ${chapterNumber}/${totalChapters}...`,
-        currentChapter: chapterNumber
-      })
-      
-      const chapterContent = await generateChapter(chapterNumber, chapterBeats, allContext, restConfig, options)
-      
+        currentChapter: chapterNumber,
+      });
+
+      // Construct dynamic context
+      const dynamicContext = {
+        ...allContext,
+        previousChapters: chapters.slice(-2), // Keep last 2 full chapters
+        storySummary: chapterSummaries.join('\n\n'),
+      };
+
+      const chapterContent = await generateChapter(chapterNumber, chapterBeats, dynamicContext, restConfig, options);
+
       chapters.push({
         id: chapterNumber,
         title: `Chapter ${chapterNumber}`,
         content: chapterContent,
-        status: 'complete'
-      })
-      
+        status: 'complete',
+      });
+
+      // Summarize older chapters to save context space
+      if (chapters.length > 2) {
+        const summary = await summarizeChapter(chapters[chapters.length - 3].content, options);
+        chapterSummaries.push(`Summary of Chapter ${chapters.length - 2}:\n${summary}`);
+      }
+
       // Yield chapter as it's completed
       if (onProgress.onChapterComplete) {
-        onProgress.onChapterComplete(chapters[chapters.length - 1])
+        onProgress.onChapterComplete(chapters[chapters.length - 1]);
       }
     }
     
