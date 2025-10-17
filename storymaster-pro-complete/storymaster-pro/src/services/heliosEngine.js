@@ -3,6 +3,18 @@
 
 import { generateWithRetry } from './apiService.js'
 
+// Helper function to parse potentially dirty JSON
+const parseJsonFromResponse = (response) => {
+  // Remove markdown code blocks and trim whitespace
+  const cleanedResponse = response.replace(/```json/g, '').replace(/```/g, '').trim();
+  try {
+    return JSON.parse(cleanedResponse);
+  } catch (error) {
+    console.error('Failed to parse JSON:', cleanedResponse);
+    throw new Error(`Invalid JSON format from AI: ${cleanedResponse}`);
+  }
+}
+
 // Step 1: Create Strategic Blueprint
 export const createBlueprint = async (premise, config, options = {}) => {
   const prompt = `You are the Helios Story Engine, a master storyteller and narrative architect.
@@ -44,15 +56,13 @@ Provide a detailed blueprint in JSON format with these exact keys:
 
 Return ONLY valid JSON, no additional text.`
 
-  const messages = [{ role: 'user', content: prompt }]
+  const messages = [
+    { role: 'system', content: 'You are a helpful assistant that always responds in the format the user requests.' },
+    { role: 'user', content: prompt }
+  ]
   const response = await generateWithRetry(messages, { ...options, temperature: 0.7 })
   
-  try {
-    return JSON.parse(response)
-  } catch (error) {
-    console.error('Failed to parse blueprint JSON:', response)
-    throw new Error(`Invalid blueprint format from AI: ${response}`)
-  }
+  return parseJsonFromResponse(response)
 }
 
 // Step 2: Create Character and World Profiles
@@ -111,15 +121,13 @@ Return as JSON with this structure:
 
 Return ONLY valid JSON.`
 
-  const messages = [{ role: 'user', content: prompt }]
+  const messages = [
+    { role: 'system', content: 'You are a helpful assistant that always responds in the format the user requests.' },
+    { role: 'user', content: prompt }
+  ]
   const response = await generateWithRetry(messages, { ...options, temperature: 0.8 })
   
-  try {
-    return JSON.parse(response)
-  } catch (error) {
-    console.error('Failed to parse characters JSON:', response)
-    throw new Error(`Invalid characters format from AI: ${response}`)
-  }
+  return parseJsonFromResponse(response)
 }
 
 // Step 3: Create Structural Scaffold (Plot Outline)
@@ -164,15 +172,13 @@ Return as JSON:
 
 Return ONLY valid JSON.`
 
-  const messages = [{ role: 'user', content: prompt }]
+  const messages = [
+    { role: 'system', content: 'You are a helpful assistant that always responds in the format the user requests.' },
+    { role: 'user', content: prompt }
+  ]
   const response = await generateWithRetry(messages, { ...options, temperature: 0.7 })
   
-  try {
-    return JSON.parse(response)
-  } catch (error) {
-    console.error('Failed to parse scaffold JSON:', response)
-    throw new Error(`Invalid scaffold format from AI: ${response}`)
-  }
+  return parseJsonFromResponse(response)
 }
 
 // Step 4: Generate Individual Chapter
