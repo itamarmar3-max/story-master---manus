@@ -278,7 +278,6 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
               <Input
                 type="number"
                 min="1000"
-                max="16000"
                 step="1000"
                 value={settings.maxTokens || 4000}
                 onChange={(e) => setSettings({ ...settings, maxTokens: parseInt(e.target.value) })}

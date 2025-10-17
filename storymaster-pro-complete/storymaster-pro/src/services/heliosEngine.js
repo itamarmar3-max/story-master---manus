@@ -1,10 +1,10 @@
 // Helios Engine - Normal Story Generation
 // Implements the multi-stage story generation process
 
-import { generateWithRetry } from './apiService'
+import { generateWithRetry } from './apiService.js'
 
 // Step 1: Create Strategic Blueprint
-export const createBlueprint = async (premise, config) => {
+export const createBlueprint = async (premise, config, options = {}) => {
   const prompt = `You are the Helios Story Engine, a master storyteller and narrative architect.
 
 USER'S PREMISE: "${premise}"
@@ -45,7 +45,7 @@ Provide a detailed blueprint in JSON format with these exact keys:
 Return ONLY valid JSON, no additional text.`
 
   const messages = [{ role: 'user', content: prompt }]
-  const response = await generateWithRetry(messages, { temperature: 0.7 })
+  const response = await generateWithRetry(messages, { ...options, temperature: 0.7 })
   
   try {
     return JSON.parse(response)
@@ -56,7 +56,7 @@ Return ONLY valid JSON, no additional text.`
 }
 
 // Step 2: Create Character and World Profiles
-export const createCharactersAndWorld = async (premise, blueprint, config) => {
+export const createCharactersAndWorld = async (premise, blueprint, config, options = {}) => {
   const prompt = `You are the Helios Story Engine. Continue building the story.
 
 PREMISE: "${premise}"
@@ -112,7 +112,7 @@ Return as JSON with this structure:
 Return ONLY valid JSON.`
 
   const messages = [{ role: 'user', content: prompt }]
-  const response = await generateWithRetry(messages, { temperature: 0.8 })
+  const response = await generateWithRetry(messages, { ...options, temperature: 0.8 })
   
   try {
     return JSON.parse(response)
@@ -123,7 +123,7 @@ Return ONLY valid JSON.`
 }
 
 // Step 3: Create Structural Scaffold (Plot Outline)
-export const createPlotScaffold = async (premise, blueprint, charactersAndWorld, config) => {
+export const createPlotScaffold = async (premise, blueprint, charactersAndWorld, config, options = {}) => {
   const prompt = `You are the Helios Story Engine. Continue building the story.
 
 PREMISE: "${premise}"
@@ -165,7 +165,7 @@ Return as JSON:
 Return ONLY valid JSON.`
 
   const messages = [{ role: 'user', content: prompt }]
-  const response = await generateWithRetry(messages, { temperature: 0.7, maxTokens: 6000 })
+  const response = await generateWithRetry(messages, { ...options, temperature: 0.7 })
   
   try {
     return JSON.parse(response)
@@ -176,7 +176,7 @@ Return ONLY valid JSON.`
 }
 
 // Step 4: Generate Individual Chapter
-export const generateChapter = async (chapterNumber, beats, allContext, config) => {
+export const generateChapter = async (chapterNumber, beats, allContext, config, options = {}) => {
   const prompt = `You are the Helios Story Engine. Write the actual story content.
 
 CONTEXT:
@@ -202,7 +202,7 @@ Write the chapter as polished prose, ready for publication. Aim for approximatel
 Return the chapter text directly, no JSON wrapper.`
 
   const messages = [{ role: 'user', content: prompt }]
-  return await generateWithRetry(messages, { temperature: 0.9, maxTokens: 8000 })
+  return await generateWithRetry(messages, { ...options, temperature: 0.9 })
 }
 
 // Helper: Get pacing guidance
@@ -238,17 +238,20 @@ function getStructureGuidance(structure) {
 // Main orchestration function
 export const generateFullStory = async (premise, config, onProgress) => {
   try {
+    const { apiKey, ...restConfig } = config;
+    const options = apiKey ? { apiKey } : {};
+
     // Step 1: Blueprint
     onProgress({ stage: 'blueprint', progress: 10, message: 'Creating strategic blueprint...' })
-    const blueprint = await createBlueprint(premise, config)
+    const blueprint = await createBlueprint(premise, restConfig, options)
     
     // Step 2: Characters & World
     onProgress({ stage: 'characters', progress: 20, message: 'Developing characters and world...' })
-    const charactersAndWorld = await createCharactersAndWorld(premise, blueprint, config)
+    const charactersAndWorld = await createCharactersAndWorld(premise, blueprint, restConfig, options)
     
     // Step 3: Plot Scaffold
     onProgress({ stage: 'scaffold', progress: 30, message: 'Building plot structure...' })
-    const scaffold = await createPlotScaffold(premise, blueprint, charactersAndWorld, config)
+    const scaffold = await createPlotScaffold(premise, blueprint, charactersAndWorld, restConfig, options)
     
     // Combine all context
     const allContext = {
@@ -277,7 +280,7 @@ export const generateFullStory = async (premise, config, onProgress) => {
         currentChapter: chapterNumber
       })
       
-      const chapterContent = await generateChapter(chapterNumber, chapterBeats, allContext, config)
+      const chapterContent = await generateChapter(chapterNumber, chapterBeats, allContext, restConfig, options)
       
       chapters.push({
         id: chapterNumber,
