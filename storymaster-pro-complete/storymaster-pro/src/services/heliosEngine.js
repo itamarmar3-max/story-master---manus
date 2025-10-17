@@ -5,15 +5,29 @@ import { generateWithRetry } from './apiService.js'
 
 // Helper function to parse potentially dirty JSON
 const parseJsonFromResponse = (response) => {
-  // Remove markdown code blocks and trim whitespace
-  const cleanedResponse = response.replace(/```json/g, '').replace(/```/g, '').trim();
-  try {
-    return JSON.parse(cleanedResponse);
-  } catch (error) {
-    console.error('Failed to parse JSON:', cleanedResponse);
-    throw new Error(`Invalid JSON format from AI: ${cleanedResponse}`);
+  // Attempt to extract JSON from markdown code blocks
+  const markdownMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
+  const contentToParse = markdownMatch ? markdownMatch[1] : response;
+
+  // Find the first '{' and last '}' to get the JSON object
+  const startIndex = contentToParse.indexOf('{');
+  const endIndex = contentToParse.lastIndexOf('}');
+
+  if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+    const jsonString = contentToParse.substring(startIndex, endIndex + 1);
+    try {
+      return JSON.parse(jsonString);
+    } catch (error) {
+      console.error('Failed to parse extracted JSON:', jsonString);
+      throw new Error(`Invalid JSON format from AI: ${jsonString}`);
+    }
+  } else {
+    // If no JSON object is found, we should inform the user.
+    // This is better than trying to parse a potentially invalid string.
+    console.error('No valid JSON object found in response:', response);
+    throw new Error(`No valid JSON object found in AI response: ${response}`);
   }
-}
+};
 
 // Step 1: Create Strategic Blueprint
 export const createBlueprint = async (premise, config, options = {}) => {
