@@ -3,8 +3,6 @@ import { Button } from '@/components/ui/button.jsx'
 import { Input } from '@/components/ui/input.jsx'
 import { Label } from '@/components/ui/label.jsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.jsx'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog.jsx'
 import { Settings, Key, Sparkles, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
 import { getApiKeys, saveApiKeys, getApiSettings, saveApiSettings, fetchOpenRouterModels, API_PROVIDERS } from '../services/apiService'
@@ -14,7 +12,6 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
   const [settings, setSettings] = useState({})
   const [models, setModels] = useState([])
   const [loadingModels, setLoadingModels] = useState(false)
-  const [testingConnection, setTestingConnection] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState(null)
 
   const translations = {
@@ -25,9 +22,7 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
       apiKey: 'API Key',
       model: 'Model',
       temperature: 'Temperature',
-      maxTokens: 'Max Tokens',
       save: 'Save Settings',
-      testConnection: 'Test Connection',
       loadModels: 'Load Models',
       openrouter: 'OpenRouter (Recommended)',
       google: 'Google Gemini',
@@ -35,8 +30,6 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
       mistral: 'Mistral AI',
       enterKey: 'Enter your API key',
       selectModel: 'Select a model',
-      connectionSuccess: 'Connection successful!',
-      connectionFailed: 'Connection failed. Check your API key.',
       modelsFetched: 'models available',
       getApiKey: 'Get API Key',
       openrouterInfo: 'OpenRouter gives you access to 100+ models including GPT-4, Claude, Gemini, and more.',
@@ -49,9 +42,7 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
       apiKey: 'מפתח API',
       model: 'מודל',
       temperature: 'טמפרטורה',
-      maxTokens: 'מקסימום טוקנים',
       save: 'שמור הגדרות',
-      testConnection: 'בדוק חיבור',
       loadModels: 'טען מודלים',
       openrouter: 'OpenRouter (מומלץ)',
       google: 'Google Gemini',
@@ -59,8 +50,6 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
       mistral: 'Mistral AI',
       enterKey: 'הזן את מפתח ה-API שלך',
       selectModel: 'בחר מודל',
-      connectionSuccess: 'החיבור הצליח!',
-      connectionFailed: 'החיבור נכשל. בדוק את מפתח ה-API.',
       modelsFetched: 'מודלים זמינים',
       getApiKey: 'קבל מפתח API',
       openrouterInfo: 'OpenRouter נותן לך גישה ל-100+ מודלים כולל GPT-4, Claude, Gemini ועוד.',

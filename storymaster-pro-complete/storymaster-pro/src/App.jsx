@@ -12,8 +12,6 @@ import { ApiSettings } from './components/ApiSettings.jsx'
 import { ChapterEditor } from './components/ChapterEditor.jsx'
 import { generateFullStory } from './services/heliosEngine.js'
 import { generateAdultStory } from './services/hadesEngine.js'
-import { generateChapter } from './services/heliosEngine.js'
-import { generateEroticChapter } from './services/hadesEngine.js'
 import { getApiKeys } from './services/apiService.js'
 import { exportStory } from './services/exportService.js'
 import './App.css'
@@ -243,10 +241,57 @@ function App() {
   }
 
   const handleRegenerateChapter = async (chapterId, instructions) => {
-    // Implementation would call the AI again with the instruction
-    console.log('Regenerating chapter', chapterId, 'with instructions:', instructions)
-    // For now, just a placeholder
-    alert('Regeneration feature coming soon!')
+    if (!currentProject) {
+      throw new Error('No active project found')
+    }
+
+    const chapterToRegenerate = currentProject.chapters.find((chapter) => chapter.id === chapterId)
+    if (!chapterToRegenerate) {
+      throw new Error(`Chapter ${chapterId} was not found`)
+    }
+
+    const combinedIdea = instructions?.trim()
+      ? `${currentProject.idea}
+
+Revision request: ${instructions.trim()}`
+      : currentProject.idea
+
+    const regenerationConfig = {
+      ...currentProject.config,
+      title: currentProject.title,
+      language,
+    }
+
+    const progressHandler = () => {}
+    const generationFn = currentProject.isAdult ? generateAdultStory : generateFullStory
+
+    const regeneratedStory = await generationFn(combinedIdea, regenerationConfig, progressHandler)
+    const regeneratedChapter = regeneratedStory.chapters.find((chapter) => chapter.id === chapterId)
+
+    if (!regeneratedChapter) {
+      throw new Error('Regenerated chapter content was not returned')
+    }
+
+    setCurrentProject((prev) => {
+      const updatedProject = {
+        ...prev,
+        chapters: prev.chapters.map((chapter) =>
+          chapter.id === chapterId
+            ? { ...chapter, content: regeneratedChapter.content }
+            : chapter,
+        ),
+      }
+
+      setProjects((prevProjects) =>
+        prevProjects.map((project) => (project.id === updatedProject.id ? updatedProject : project)),
+      )
+
+      return updatedProject
+    })
+
+    setSelectedChapter((prev) => (prev && prev.id === chapterId
+      ? { ...prev, content: regeneratedChapter.content }
+      : prev))
   }
 
   const handleExport = async (format) => {
@@ -293,7 +338,7 @@ function App() {
   }
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-white \${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'} style={{ fontFamily: language === 'he' ? 'Assistant, sans-serif' : 'Inter, sans-serif' }}>
+    <div className={`min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-white ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'} style={{ fontFamily: language === 'he' ? 'Assistant, sans-serif' : 'Inter, sans-serif' }}>
       <header className="border-b border-white/10 backdrop-blur-sm bg-black/20 sticky top-0 z-50">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -383,7 +428,7 @@ function App() {
         {screen === 'configuration' && (
           <div className="max-w-4xl mx-auto animate-fade-in">
             <Button variant="ghost" onClick={resetToHome} className="mb-6 hover:bg-white/10">
-              <ChevronRight className={`w-4 h-4 \${isRTL ? '' : 'rotate-180'} mr-2`} />
+              <ChevronRight className={`w-4 h-4 ${isRTL ? '' : 'rotate-180'} mr-2`} />
               {t.backToHome}
             </Button>
 
@@ -544,7 +589,7 @@ function App() {
           <div className="max-w-6xl mx-auto animate-fade-in">
             <div className="flex items-center justify-between mb-6">
               <Button variant="ghost" onClick={resetToHome} className="hover:bg-white/10">
-                <ChevronRight className={`w-4 h-4 \${isRTL ? '' : 'rotate-180'} mr-2`} />
+                <ChevronRight className={`w-4 h-4 ${isRTL ? '' : 'rotate-180'} mr-2`} />
                 {t.backToHome}
               </Button>
               <div className="flex gap-2">
@@ -651,7 +696,7 @@ function App() {
                 {t.projectLibrary}
               </h2>
               <Button variant="outline" onClick={resetToHome} className="border-white/20 hover:bg-white/10">
-                <ChevronRight className={`w-4 h-4 \${isRTL ? '' : 'rotate-180'} mr-2`} />
+                <ChevronRight className={`w-4 h-4 ${isRTL ? '' : 'rotate-180'} mr-2`} />
                 {t.backToHome}
               </Button>
             </div>
@@ -676,7 +721,7 @@ function App() {
                       <p className="text-gray-400 text-sm mb-4 line-clamp-2">{project.idea}</p>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-gray-500">{project.chapters.length} {t.chapters}</span>
-                        <span className={`text-sm font-semibold \${project.status === 'complete' ? 'text-green-400' : 'text-purple-400'}`}>
+                        <span className={`text-sm font-semibold ${project.status === 'complete' ? 'text-green-400' : 'text-purple-400'}`}>
                           {project.status === 'complete' ? t.complete : t.generating}
                         </span>
                       </div>
@@ -701,7 +746,6 @@ function App() {
           onClose={() => setShowChapterEditor(false)}
           onSave={handleSaveChapter}
           onRegenerate={handleRegenerateChapter}
-          isAdultMode={isAdultMode}
           language={language}
         />
       )}

@@ -78,6 +78,7 @@ const generateWithOpenRouter = async (apiKey, model, messages, options = {}) => 
         model: model,
         messages: messages,
         temperature: options.temperature || 0.8,
+        max_tokens: options.maxTokens,
         stream: false
       })
     })
@@ -112,7 +113,8 @@ const generateWithGoogle = async (apiKey, model, messages, options = {}) => {
       body: JSON.stringify({
         contents: contents,
         generationConfig: {
-          temperature: options.temperature || 0.8
+          temperature: options.temperature || 0.8,
+          maxOutputTokens: options.maxTokens
         }
       })
     })
@@ -141,7 +143,8 @@ const generateWithDeepSeek = async (apiKey, model, messages, options = {}) => {
       body: JSON.stringify({
         model: model,
         messages: messages,
-        temperature: options.temperature || 0.8
+        temperature: options.temperature || 0.8,
+        max_tokens: options.maxTokens
       })
     })
 
@@ -169,7 +172,8 @@ const generateWithMistral = async (apiKey, model, messages, options = {}) => {
       body: JSON.stringify({
         model: model,
         messages: messages,
-        temperature: options.temperature || 0.8
+        temperature: options.temperature || 0.8,
+        max_tokens: options.maxTokens
       })
     })
 
@@ -192,14 +196,15 @@ export const generateText = async (messages, options = {}) => {
 
   const provider = options.provider || settings.provider
   const model = options.model || settings.model
-  const apiKey = apiKeys[provider]
+  const apiKey = options.apiKey || apiKeys[provider]
 
   if (!apiKey) {
     throw new Error(`No API key found for provider: ${provider}. Please add your API key in the settings.`);
   }
 
   const genOptions = {
-    temperature: options.temperature || settings.temperature
+    temperature: options.temperature ?? settings.temperature,
+    maxTokens: options.maxTokens
   }
 
   switch (provider) {
@@ -243,4 +248,3 @@ export const generateWithRetry = async (messages, options = {}, maxRetries = 3) 
 }
 
 export { API_PROVIDERS }
-
