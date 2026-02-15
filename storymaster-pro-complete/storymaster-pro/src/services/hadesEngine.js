@@ -20,6 +20,29 @@ const parseJsonFromResponse = (response, errorLabel) => {
   return JSON.parse(jsonString)
 }
 
+
+const getStyleDirective = (styleMode) => {
+  switch (styleMode) {
+    case 'pornographic':
+      return 'Prioritize raw arousal, direct body language, and explicit erotic momentum while keeping character motivations coherent.'
+    case 'classic-literary':
+      return 'Prioritize elegant literary prose, emotional nuance, and restrained sensual rhythm while preserving mature intimacy.'
+    default:
+      return 'Balance erotic intensity and literary storytelling with strong emotional continuity.'
+  }
+}
+
+const getExplicitnessDirective = (explicitnessMode) => {
+  switch (explicitnessMode) {
+    case 'maximum':
+      return 'Maximum explicitness: no euphemistic fade-outs, direct descriptions of acts, and complete scene progression from initiation to aftermath.'
+    case 'uncensored':
+      return 'Uncensored explicitness: direct terminology is allowed and scenes should stay fully on-page when intimacy occurs.'
+    default:
+      return 'Literary-erotic explicitness: sensual and mature with optional selective restraint where it improves narrative impact.'
+  }
+}
+
 // Step 1: Erotic Blueprinting
 export const createEroticBlueprint = async (premise, config, options = {}) => {
   const prompt = `You are the Hades Narrative Engine, specialized in creating visceral, arousing, and emotionally compelling erotic narratives.
@@ -221,15 +244,15 @@ WRITING GUIDELINES:
 3. **Emotional Connection**: Connect physical sensations to emotional states
 4. **Power Dynamic**: Respect and explore the ${config.powerDynamic} dynamic
 5. **Consequence**: Every intimate scene must change the relationship
+6. **Style Mode**: ${config.styleMode || 'balanced'}. ${getStyleDirective(config.styleMode)}
+7. **Explicitness Mode**: ${config.explicitnessMode || 'literary-erotic'}. ${getExplicitnessDirective(config.explicitnessMode)}
 
 ${hasReleaseScene ? `
-UNCENSORED GENERATION MANDATE (NON-NEGOTIABLE):
+RELEASE-SCENE MANDATE:
 This chapter contains a "Release" scene. You MUST:
-- NO FADING TO BLACK: Describe all acts from beginning to end
-- GRAPHIC & ANATOMICAL LANGUAGE: Use direct, explicit, uncensored terminology
-- MULTI-SENSORY: Describe sights, sounds (gasps, moans, words), smells, tastes, textures
-- PSYCHOLOGICAL DEPTH: What are they thinking and feeling during the act?
-- FOCUS ON CONSEQUENCE: How does this scene change them?
+- Keep the scene on-page with clear progression and aftermath
+- Match descriptive intensity to Explicitness Mode and Intensity Level
+- Keep consent, boundaries, and emotional consequence visible in the prose
 
 Intensity Level: ${config.intensityLevel}
 Kinks to incorporate: ${config.kinks}

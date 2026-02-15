@@ -12,7 +12,7 @@ import { ApiSettings } from './components/ApiSettings.jsx'
 import { ChapterEditor } from './components/ChapterEditor.jsx'
 import { generateFullStory } from './services/heliosEngine.js'
 import { generateAdultStory } from './services/hadesEngine.js'
-import { getApiKeys } from './services/apiService.js'
+import { getApiKeys, getApiSettings } from './services/apiService.js'
 import { exportStory } from './services/exportService.js'
 import './App.css'
 
@@ -41,7 +41,9 @@ function App() {
     eroticGenre: '',
     kinks: '',
     intensityLevel: '',
-    powerDynamic: ''
+    powerDynamic: '',
+    explicitnessMode: 'literary-erotic',
+    styleMode: 'balanced'
   })
 
   useEffect(() => {
@@ -84,6 +86,8 @@ function App() {
       eroticGenre: 'Erotic Genre',
       kinks: 'Kinks & Fetishes',
       intensityLevel: 'Intensity Level',
+      explicitnessMode: 'Explicitness Mode',
+      styleMode: 'Writing Style',
       powerDynamic: 'Power Dynamic',
       backToHome: 'Back to Home',
       viewLibrary: 'View Library',
@@ -127,6 +131,8 @@ function App() {
       eroticGenre: 'ז\'אנר אירוטי',
       kinks: 'העדפות ופטישים',
       intensityLevel: 'רמת עוצמה',
+      explicitnessMode: 'רמת מפורשות',
+      styleMode: 'סגנון כתיבה',
       powerDynamic: 'דינמיקת כוח',
       backToHome: 'חזרה לבית',
       viewLibrary: 'צפה בספרייה',
@@ -168,9 +174,22 @@ function App() {
     }
   }
 
+
+  const isConfigComplete = isAdultMode
+    ? Boolean(config.title && config.eroticGenre && config.intensityLevel && config.powerDynamic && config.targetWordCount)
+    : Boolean(config.title && config.genre && config.narrativeStructure && config.pacingProfile && config.targetWordCount)
+
   const handleGenerateStory = async () => {
+    if (!isConfigComplete) {
+      alert(language === 'en' ? 'Please complete all required fields before generating.' : 'אנא מלא את כל השדות הנדרשים לפני היצירה.')
+      return
+    }
+
     const apiKeys = getApiKeys()
-    if (!apiKeys || Object.keys(apiKeys).length === 0) {
+    const apiSettings = getApiSettings()
+    const selectedProvider = apiSettings?.provider
+
+    if (!selectedProvider || !apiKeys?.[selectedProvider]) {
       alert(t.apiNotConfigured)
       setShowApiSettings(true)
       return
@@ -328,7 +347,9 @@ Revision request: ${instructions.trim()}`
       eroticGenre: '',
       kinks: '',
       intensityLevel: '',
-      powerDynamic: ''
+      powerDynamic: '',
+      explicitnessMode: 'literary-erotic',
+      styleMode: 'balanced'
     })
   }
 
@@ -534,8 +555,40 @@ Revision request: ${instructions.trim()}`
                           <SelectValue placeholder={language === 'en' ? 'Select intensity' : 'בחר עוצמה'} />
                         </SelectTrigger>
                         <SelectContent className="bg-gray-900 border-white/20">
+                          <SelectItem value="suggestive">Suggestive</SelectItem>
                           <SelectItem value="explicit">Explicit</SelectItem>
                           <SelectItem value="graphic">Graphic / Uncensored</SelectItem>
+                          <SelectItem value="hardcore">Hardcore / No Fadeout</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+
+
+                    <div className="space-y-2">
+                      <Label htmlFor="styleMode" className="text-white">{t.styleMode}</Label>
+                      <Select value={config.styleMode} onValueChange={(value) => setConfig({ ...config, styleMode: value })}>
+                        <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                          <SelectValue placeholder={language === 'en' ? 'Select style' : 'בחר סגנון'} />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-white/20">
+                          <SelectItem value="balanced">Balanced</SelectItem>
+                          <SelectItem value="pornographic">Pornographic Focus</SelectItem>
+                          <SelectItem value="classic-literary">Classic Literary</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="explicitnessMode" className="text-white">{t.explicitnessMode}</Label>
+                      <Select value={config.explicitnessMode} onValueChange={(value) => setConfig({ ...config, explicitnessMode: value })}>
+                        <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                          <SelectValue placeholder={language === 'en' ? 'Select explicitness' : 'בחר רמת מפורשות'} />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-white/20">
+                          <SelectItem value="literary-erotic">Literary Erotic</SelectItem>
+                          <SelectItem value="uncensored">Uncensored</SelectItem>
+                          <SelectItem value="maximum">Maximum Explicit</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -576,7 +629,7 @@ Revision request: ${instructions.trim()}`
                   </div>
                 )}
 
-                <Button onClick={handleGenerateStory} disabled={!config.title} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-6 text-lg transition-all transform hover:scale-[1.02]">
+                <Button onClick={handleGenerateStory} disabled={!isConfigComplete} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-6 text-lg transition-all transform hover:scale-[1.02]">
                   <Sparkles className="w-5 h-5 mr-2" />
                   {t.generateStory}
                 </Button>
