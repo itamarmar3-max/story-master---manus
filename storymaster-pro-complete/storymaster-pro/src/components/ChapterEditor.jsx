@@ -2,11 +2,9 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog.jsx'
-import { Input } from '@/components/ui/input.jsx'
-import { Label } from '@/components/ui/label.jsx'
 import { Edit3, Save, X, RefreshCw, Loader2, Copy, Check } from 'lucide-react'
 
-export function ChapterEditor({ chapter, isOpen, onClose, onSave, onRegenerate, isAdultMode, language = 'en' }) {
+export function ChapterEditor({ chapter, isOpen, onClose, onSave, onRegenerate, language = 'en' }) {
   const [content, setContent] = useState(chapter?.content || '')
   const [isEditing, setIsEditing] = useState(false)
   const [regeneratePrompt, setRegeneratePrompt] = useState('')

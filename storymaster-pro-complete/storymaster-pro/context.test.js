@@ -1,5 +1,5 @@
 // context.test.js
-import { generateFullStory, summarizeChapter } from './src/services/heliosEngine.js';
+import { generateFullStory } from './src/services/heliosEngine.js';
 import * as apiService from './src/services/apiService.js';
 
 // Mock the apiService

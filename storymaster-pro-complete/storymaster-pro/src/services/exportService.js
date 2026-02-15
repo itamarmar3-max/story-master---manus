@@ -126,23 +126,23 @@ export const exportStory = async (project, format) => {
   const sanitizedTitle = project.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()
   
   switch (format) {
-    case 'txt':
+    case 'txt': {
       const txtContent = exportToTxt(project)
       downloadFile(txtContent, `${sanitizedTitle}.txt`, 'text/plain')
       break
-      
-    case 'rtf':
+    }
+    case 'rtf': {
       const rtfContent = exportToRtf(project)
       downloadFile(rtfContent, `${sanitizedTitle}.rtf`, 'application/rtf')
       break
-      
-    case 'docx':
+    }
+    case 'docx': {
       const docxContent = await exportToDocx(project)
       downloadFile(docxContent, `${sanitizedTitle}.html`, 'text/html')
       // Note: This creates an HTML file that can be opened in Word and saved as DOCX
       // For true DOCX, we'd need a library like docx.js, but this works as a fallback
       break
-      
+    }
     default:
       throw new Error(`Unsupported format: ${format}`)
   }

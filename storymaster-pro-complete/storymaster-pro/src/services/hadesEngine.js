@@ -1,10 +1,27 @@
 // Hades Engine - Adult/Erotic Story Generation
 // Implements the Dual-Helix method for explicit content
 
-import { generateWithRetry } from './apiService'
+import { generateWithRetry } from './apiService.js'
+
+
+// Helper function to parse potentially wrapped JSON responses
+const parseJsonFromResponse = (response, errorLabel) => {
+  const markdownMatch = response.match(/```json\s*([\s\S]*?)\s*```/)
+  const contentToParse = markdownMatch ? markdownMatch[1] : response
+
+  const startIndex = contentToParse.indexOf('{')
+  const endIndex = contentToParse.lastIndexOf('}')
+
+  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
+    throw new Error(`${errorLabel}: no JSON object found`)
+  }
+
+  const jsonString = contentToParse.substring(startIndex, endIndex + 1)
+  return JSON.parse(jsonString)
+}
 
 // Step 1: Erotic Blueprinting
-export const createEroticBlueprint = async (premise, config) => {
+export const createEroticBlueprint = async (premise, config, options = {}) => {
   const prompt = `You are the Hades Narrative Engine, specialized in creating visceral, arousing, and emotionally compelling erotic narratives.
 
 USER'S PREMISE: "${premise}"
@@ -41,10 +58,10 @@ Return as JSON:
 Return ONLY valid JSON.`
 
   const messages = [{ role: 'user', content: prompt }]
-  const response = await generateWithRetry(messages, { temperature: 0.7 })
+  const response = await generateWithRetry(messages, { ...options, temperature: 0.7 })
   
   try {
-    return JSON.parse(response)
+    return parseJsonFromResponse(response, 'Invalid blueprint format from AI')
   } catch (error) {
     console.error('Failed to parse erotic blueprint JSON:', error)
     throw new Error('Invalid blueprint format from AI')
@@ -52,7 +69,7 @@ Return ONLY valid JSON.`
 }
 
 // Step 2: Libidinal Profiling
-export const createLibidinalProfiles = async (premise, blueprint, config) => {
+export const createLibidinalProfiles = async (premise, blueprint, config, options = {}) => {
   const prompt = `You are the Hades Narrative Engine. Continue building the erotic story.
 
 PREMISE: "${premise}"
@@ -109,10 +126,10 @@ Return as JSON:
 Return ONLY valid JSON.`
 
   const messages = [{ role: 'user', content: prompt }]
-  const response = await generateWithRetry(messages, { temperature: 0.8 })
+  const response = await generateWithRetry(messages, { ...options, temperature: 0.8 })
   
   try {
-    return JSON.parse(response)
+    return parseJsonFromResponse(response, 'Invalid profiles format from AI')
   } catch (error) {
     console.error('Failed to parse profiles JSON:', error)
     throw new Error('Invalid profiles format from AI')
@@ -120,7 +137,7 @@ Return ONLY valid JSON.`
 }
 
 // Step 3: Dual-Helix Plotting
-export const createDualHelixPlot = async (premise, blueprint, profiles, config) => {
+export const createDualHelixPlot = async (premise, blueprint, profiles, config, options = {}) => {
   const prompt = `You are the Hades Narrative Engine. Continue building the erotic story.
 
 PREMISE: "${premise}"
@@ -171,10 +188,10 @@ Return as JSON:
 Return ONLY valid JSON.`
 
   const messages = [{ role: 'user', content: prompt }]
-  const response = await generateWithRetry(messages, { temperature: 0.7, maxTokens: 6000 })
+  const response = await generateWithRetry(messages, { ...options, temperature: 0.7, maxTokens: 6000 })
   
   try {
-    return JSON.parse(response)
+    return parseJsonFromResponse(response, 'Invalid plot format from AI')
   } catch (error) {
     console.error('Failed to parse plot JSON:', error)
     throw new Error('Invalid plot format from AI')
@@ -182,7 +199,7 @@ Return ONLY valid JSON.`
 }
 
 // Step 4: Generate Chapter with Uncensored Mandate
-export const generateEroticChapter = async (chapterNumber, beats, allContext, config) => {
+export const generateEroticChapter = async (chapterNumber, beats, allContext, config, options = {}) => {
   const sceneTypes = beats.map(b => b.sceneType).join(', ')
   const hasReleaseScene = beats.some(b => b.sceneType === 'Release')
   
@@ -223,23 +240,26 @@ Write the chapter as polished, arousing prose. Aim for approximately ${Math.floo
 Return the chapter text directly, no JSON wrapper.`
 
   const messages = [{ role: 'user', content: prompt }]
-  return await generateWithRetry(messages, { temperature: 0.95, maxTokens: 8000 })
+  return await generateWithRetry(messages, { ...options, temperature: 0.95, maxTokens: 8000 })
 }
 
 // Main orchestration function for adult stories
 export const generateAdultStory = async (premise, config, onProgress) => {
   try {
+    const { apiKey, ...restConfig } = config
+    const options = apiKey ? { apiKey } : {}
+
     // Step 1: Erotic Blueprint
     onProgress({ stage: 'blueprint', progress: 10, message: 'Creating erotic blueprint...' })
-    const blueprint = await createEroticBlueprint(premise, config)
+    const blueprint = await createEroticBlueprint(premise, restConfig, options)
     
     // Step 2: Libidinal Profiles
     onProgress({ stage: 'profiles', progress: 20, message: 'Developing character desires...' })
-    const profiles = await createLibidinalProfiles(premise, blueprint, config)
+    const profiles = await createLibidinalProfiles(premise, blueprint, restConfig, options)
     
     // Step 3: Dual-Helix Plot
     onProgress({ stage: 'plot', progress: 30, message: 'Weaving plot and intimacy...' })
-    const plot = await createDualHelixPlot(premise, blueprint, profiles, config)
+    const plot = await createDualHelixPlot(premise, blueprint, profiles, restConfig, options)
     
     // Combine all context
     const allContext = {
@@ -268,7 +288,7 @@ export const generateAdultStory = async (premise, config, onProgress) => {
         currentChapter: chapterNumber
       })
       
-      const chapterContent = await generateEroticChapter(chapterNumber, chapterBeats, allContext, config)
+      const chapterContent = await generateEroticChapter(chapterNumber, chapterBeats, allContext, restConfig, options)
       
       chapters.push({
         id: chapterNumber,

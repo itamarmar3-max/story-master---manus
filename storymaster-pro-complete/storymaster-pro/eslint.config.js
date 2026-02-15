@@ -30,4 +30,12 @@ export default [
       ],
     },
   },
+  {
+    files: ['**/*.test.js', 'test.js', 'context.test.js'],
+    languageOptions: {
+      globals: {
+        ...globals.jest,
+      },
+    },
+  }
 ]

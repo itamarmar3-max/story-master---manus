@@ -17,7 +17,7 @@ const parseJsonFromResponse = (response) => {
     const jsonString = contentToParse.substring(startIndex, endIndex + 1);
     try {
       return JSON.parse(jsonString);
-    } catch (error) {
+    } catch {
       console.error('Failed to parse extracted JSON:', jsonString);
       throw new Error(`Invalid JSON format from AI: ${jsonString}`);
     }
