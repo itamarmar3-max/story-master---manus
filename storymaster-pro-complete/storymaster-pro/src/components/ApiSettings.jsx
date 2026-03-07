@@ -122,7 +122,12 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
   const handleApiKeyChange = (provider, key) => {
     const newKeys = { ...apiKeys, [provider]: key }
     setApiKeys(newKeys)
-    saveApiKeys(newKeys)
+
+    try {
+      saveApiKeys(newKeys)
+    } catch (error) {
+      alert(error.message)
+    }
   }
 
   const loadModelsFromOpenRouter = async (fetcher, statusLabel) => {
@@ -180,8 +185,12 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
   }
 
   const handleSave = () => {
-    saveApiSettings(settings)
-    onClose()
+    try {
+      saveApiSettings(settings)
+      onClose()
+    } catch (error) {
+      alert(error.message)
+    }
   }
 
   const providerLinks = {

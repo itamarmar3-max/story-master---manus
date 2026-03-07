@@ -57,8 +57,8 @@ const escapeRtf = (text) => {
     .replace(/\n/g, '\\par\n')
 }
 
-// Export to DOCX (using docx library approach - simplified HTML-based)
-export const exportToDocx = async (project) => {
+// Export to Word-compatible HTML
+export const exportToWordHtml = async (project) => {
   const { title, chapters, config } = project
   
   // Create a simple HTML structure that can be converted to DOCX
@@ -101,6 +101,10 @@ export const exportToDocx = async (project) => {
   return html
 }
 
+
+// Backward-compatible alias
+export const exportToDocx = exportToWordHtml
+
 // Helper function to escape HTML
 const escapeHtml = (text) => {
   const div = document.createElement('div')
@@ -137,7 +141,7 @@ export const exportStory = async (project, format) => {
       break
     }
     case 'docx': {
-      const docxContent = await exportToDocx(project)
+      const docxContent = await exportToWordHtml(project)
       downloadFile(docxContent, `${sanitizedTitle}.html`, 'text/html')
       // Note: This creates an HTML file that can be opened in Word and saved as DOCX
       // For true DOCX, we'd need a library like docx.js, but this works as a fallback

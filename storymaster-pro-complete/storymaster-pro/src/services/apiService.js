@@ -86,7 +86,12 @@ export const getApiKeys = () => {
 
 // Save API keys to localStorage
 export const saveApiKeys = (keys) => {
-  localStorage.setItem('storymaster_api_keys', JSON.stringify(keys))
+  try {
+    localStorage.setItem('storymaster_api_keys', JSON.stringify(keys))
+  } catch (error) {
+    console.warn('Failed to persist API keys to localStorage:', error)
+    throw new Error('Failed to save API keys locally. Browser storage quota may be full.')
+  }
 }
 
 // Get selected provider and model
@@ -101,7 +106,12 @@ export const getApiSettings = () => {
 
 // Save API settings
 export const saveApiSettings = (settings) => {
-  localStorage.setItem('storymaster_api_settings', JSON.stringify(settings))
+  try {
+    localStorage.setItem('storymaster_api_settings', JSON.stringify(settings))
+  } catch (error) {
+    console.warn('Failed to persist API settings to localStorage:', error)
+    throw new Error('Failed to save API settings locally. Browser storage quota may be full.')
+  }
 }
 
 // Fetch available models from OpenRouter
@@ -195,10 +205,11 @@ const generateWithGoogle = async (apiKey, model, messages, options = {}) => {
       parts: [{ text: msg.content }]
     }))
 
-    const response = await fetch(`${GOOGLE_BASE_URL}/models/${model}:generateContent?key=${apiKey}`, {
+    const response = await fetch(`${GOOGLE_BASE_URL}/models/${model}:generateContent`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey
       },
       body: JSON.stringify({
         contents,
