@@ -6,24 +6,34 @@ The Vite app is inside:
 
 - `storymaster-pro-complete/storymaster-pro`
 
-This repository now includes root-level deployment config so hosting providers that build from repo root can still find/build/publish the app correctly.
+This repository includes root-level deployment config so providers that build from repo root still install/build/publish the nested app correctly.
 
-## Vercel deployment (important)
+## Quick deployment checklist (Vercel)
 
-If your logs show `Running "vercel build"`, your deployment is running on **Vercel** (not Cloudflare).
+If your logs show `Running "vercel build"`, you are deploying to **Vercel**.
 
-This repo includes `vercel.json` so Vercel will:
+1. Import the repo in Vercel.
+2. Keep **Root Directory** as repository root (`/`).
+3. Ensure **Install Command** is `npm run install:app`.
+4. Ensure **Build Command** is `npm run build`.
+5. Ensure **Output Directory** is `storymaster-pro-complete/storymaster-pro/dist`.
 
-- install nested app dependencies via `npm run install:app`
-- build nested app via `npm run build`
-- publish `storymaster-pro-complete/storymaster-pro/dist`
+> The same values are already committed in `vercel.json`.
 
-## Cloudflare Pages deployment
+## Quick deployment checklist (Cloudflare Pages)
 
-This repo also includes `wrangler.toml` with:
+Use repository root and these values:
 
-- build command: `npm run install:app && npm run build`
-- output directory: `storymaster-pro-complete/storymaster-pro/dist`
+- Build command: `npm run install:app && npm run build`
+- Build output directory: `storymaster-pro-complete/storymaster-pro/dist`
+
+> These are already committed in `wrangler.toml`.
+
+## Included deployment config files
+
+- `package.json` (root): provides `install:app`, `build`, `dev` scripts that proxy into the nested app.
+- `vercel.json`: explicit Vercel install/build/output mapping.
+- `wrangler.toml`: explicit Cloudflare Pages build/output mapping.
 
 ## API errors vs hosting errors
 
@@ -34,3 +44,7 @@ The frontend calls AI providers directly from the browser. API failures are usua
 - quota/credits/rate limits
 
 These are different from hosting issues like 404/site-not-found.
+
+## הערה חשובה בעברית
+
+אם בלוג כתוב `vercel build`, אז הפריסה לא רצה ב-Cloudflare אלא ב-Vercel. במקרה כזה צריך לבדוק הגדרות Vercel (Install/Build/Output) ולא רק Cloudflare.

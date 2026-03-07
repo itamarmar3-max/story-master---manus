@@ -5,5 +5,9 @@
     "install:app": "npm --prefix storymaster-pro-complete/storymaster-pro ci",
     "build": "npm --prefix storymaster-pro-complete/storymaster-pro run build",
     "dev": "npm --prefix storymaster-pro-complete/storymaster-pro run dev"
+  },
+  "engines": {
+    "node": ">=20 <23",
+    "npm": ">=10"
   }
 }
