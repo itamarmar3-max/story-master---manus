@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog.jsx'
@@ -49,6 +49,10 @@ export function ChapterEditor({ chapter, isOpen, onClose, onSave, onRegenerate, 
   const isRTL = language === 'he'
 
   const wordCount = content.split(/\s+/).filter(w => w.length > 0).length
+
+  useEffect(() => {
+    setContent(chapter?.content || '')
+  }, [chapter])
 
   const handleSave = () => {
     onSave(chapter.id, content)
