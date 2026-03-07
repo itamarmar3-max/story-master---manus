@@ -4,6 +4,12 @@
 import { generateWithRetry } from './apiService.js'
 import { buildContinuityPacket, createInitialMemoryState, updateStoryMemory } from './storyMemoryService.js'
 
+const throwIfGenerationAborted = (options = {}) => {
+  if (typeof options.shouldAbort === 'function' && options.shouldAbort()) {
+    throw new Error('Generation cancelled by user')
+  }
+}
+
 const parseJsonFromResponse = (response, errorLabel) => {
   const markdownMatch = response.match(/```json\s*([\s\S]*?)\s*```/)
   const contentToParse = markdownMatch ? markdownMatch[1] : response
@@ -193,6 +199,7 @@ export const generateAdultStory = async (premise, config, onProgress, generation
     let memoryState = createInitialMemoryState(premise, restConfig)
 
     for (let i = 0; i < totalChapters; i++) {
+      throwIfGenerationAborted(options)
       const chapterNumber = i + 1
       const startBeat = i * beatsPerChapter
       const endBeat = Math.min((i + 1) * beatsPerChapter, beats.length)
@@ -206,7 +213,9 @@ export const generateAdultStory = async (premise, config, onProgress, generation
       })
 
       const continuityPacket = buildContinuityPacket(memoryState, chapterNumber)
+      throwIfGenerationAborted(options)
       const chapterContent = await generateEroticChapter(chapterNumber, chapterBeats, allContext, restConfig, continuityPacket, options)
+      throwIfGenerationAborted(options)
 
       const chapter = {
         id: chapterNumber,
@@ -217,6 +226,7 @@ export const generateAdultStory = async (premise, config, onProgress, generation
 
       chapters.push(chapter)
       memoryState = await updateStoryMemory(memoryState, chapter, options)
+      throwIfGenerationAborted(options)
 
       if (onProgress.onChapterComplete) {
         onProgress.onChapterComplete(chapter)

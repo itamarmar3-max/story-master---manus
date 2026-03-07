@@ -65,5 +65,5 @@ test('should use summaries for long stories', async () => {
   expect(story).toBeDefined();
   expect(story.chapters).toBeDefined();
   expect(story.chapters.length).toBe(15);
-  expect(apiService.generateWithRetry).toHaveBeenCalledTimes(31); // 3 setup calls + 15 chapter calls + 13 summary calls
+  expect(apiService.generateWithRetry).toHaveBeenCalledTimes(33); // 3 setup calls + 15 chapter calls + 15 memory update calls
 });

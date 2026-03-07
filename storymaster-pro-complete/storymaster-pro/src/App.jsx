@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button.jsx'
 import { Input } from '@/components/ui/input.jsx'
 import { Label } from '@/components/ui/label.jsx'
@@ -14,7 +14,6 @@ import { generateFullStory } from './services/heliosEngine.js'
 import { generateAdultStory } from './services/hadesEngine.js'
 import { generateWithRetry, getApiKeys, getApiSettings } from './services/apiService.js'
 import { exportStory } from './services/exportService.js'
-import './App.css'
 
 function App() {
   const [language, setLanguage] = useState('en')
@@ -31,6 +30,8 @@ function App() {
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [isUpgradingPrompt, setIsUpgradingPrompt] = useState(false)
   const [isRegeneratingChapter, setIsRegeneratingChapter] = useState(false)
+  const [isGenerationCancelling, setIsGenerationCancelling] = useState(false)
+  const generationAbortRef = useRef(false)
   
   const [config, setConfig] = useState({
     title: '',
@@ -56,10 +57,20 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (projects.length > 0) {
+    try {
+      if (projects.length === 0) {
+        localStorage.removeItem('storymaster_projects')
+        return
+      }
+
       localStorage.setItem('storymaster_projects', JSON.stringify(projects))
+    } catch (error) {
+      console.warn('Failed to persist projects to localStorage:', error)
+      alert(language === 'en'
+        ? 'Failed to save project locally. Browser storage quota may be full.'
+        : 'שמירת הפרויקט נכשלה מקומית. ייתכן שנפח האחסון בדפדפן מלא.')
     }
-  }, [projects])
+  }, [projects, language])
 
   const translations = {
     en: {
@@ -114,7 +125,10 @@ function App() {
       promptLabel: 'Original Prompt',
       chapterRegenerating: 'Regenerating chapter...',
       chapterRegenDone: 'Chapter regenerated successfully',
-      chapterRegenError: 'Failed to regenerate chapter'
+      chapterRegenError: 'Failed to regenerate chapter',
+      cancelGeneration: 'Cancel Generation',
+      cancellingGeneration: 'Cancelling...',
+      generationCancelled: 'Generation cancelled'
     },
     he: {
       appTitle: 'StoryMaster Pro',
@@ -168,7 +182,10 @@ function App() {
       promptLabel: 'פרומפט מקורי',
       chapterRegenerating: 'יוצר מחדש פרק...',
       chapterRegenDone: 'הפרק נוצר מחדש בהצלחה',
-      chapterRegenError: 'יצירה מחדש של הפרק נכשלה'
+      chapterRegenError: 'יצירה מחדש של הפרק נכשלה',
+      cancelGeneration: 'בטל יצירה',
+      cancellingGeneration: 'מבטל...',
+      generationCancelled: 'היצירה בוטלה'
     }
   }
 
@@ -244,6 +261,9 @@ function App() {
       return
     }
 
+    generationAbortRef.current = false
+    setIsGenerationCancelling(false)
+
     const newProject = {
       id: Date.now(),
       title: config.title || 'Untitled Story',
@@ -275,7 +295,11 @@ function App() {
         })
       }
       
-      const generationOptions = { provider: apiSettings.provider, model: apiSettings.model }
+      const generationOptions = {
+        provider: apiSettings.provider,
+        model: apiSettings.model,
+        shouldAbort: () => generationAbortRef.current,
+      }
       const result = isAdultMode 
         ? await generateAdultStory(storyIdea, config, progressCallback, generationOptions)
         : await generateFullStory(storyIdea, config, progressCallback, generationOptions)
@@ -288,13 +312,34 @@ function App() {
       
     } catch (error) {
       console.error('Generation error:', error)
-      alert(`${t.error}: ${error.message}`)
+
+      const wasCancelled = error?.message === 'Generation cancelled by user'
+      if (!wasCancelled) {
+        alert(`${t.error}: ${error.message}`)
+      }
+
       setCurrentProject(prev => ({
         ...prev,
-        status: 'error',
+        status: wasCancelled ? 'cancelled' : 'error',
         error: error.message
       }))
+    } finally {
+      setIsGenerationCancelling(false)
+      generationAbortRef.current = false
     }
+  }
+
+  const handleCancelGeneration = () => {
+    if (!currentProject || currentProject.status !== 'generating') {
+      return
+    }
+
+    generationAbortRef.current = true
+    setIsGenerationCancelling(true)
+    setGenerationProgress(prev => ({
+      ...prev,
+      message: t.cancellingGeneration,
+    }))
   }
 
   const handleSaveChapter = (chapterId, newContent) => {
@@ -516,7 +561,13 @@ Return only the revised full chapter text.`
                       <CardHeader>
                         <CardTitle className="text-white flex items-center justify-between">
                           <span>{project.title}</span>
-                          <span className="text-sm text-gray-400">{project.status === 'complete' ? t.complete : t.generating}</span>
+                          <span className="text-sm text-gray-400">
+                            {project.status === 'complete'
+                              ? t.complete
+                              : project.status === 'cancelled'
+                                ? t.generationCancelled
+                                : t.generating}
+                          </span>
                         </CardTitle>
                         <CardDescription className="text-gray-400">{project.idea.substring(0, 100)}...</CardDescription>
                       </CardHeader>
@@ -772,6 +823,18 @@ Return only the revised full chapter text.`
                           <span className="text-sm">{generationProgress.message || t.generating}</span>
                         </div>
                         <p className="text-xs text-gray-500">{generationProgress.stage}</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={isGenerationCancelling}
+                          onClick={handleCancelGeneration}
+                          className="border-red-400/30 text-red-300 hover:bg-red-500/10"
+                        >
+                          {isGenerationCancelling
+                            ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            : <Trash2 className="w-4 h-4 mr-2" />}
+                          {isGenerationCancelling ? t.cancellingGeneration : t.cancelGeneration}
+                        </Button>
                       </div>
                     )}
                     
@@ -783,6 +846,13 @@ Return only the revised full chapter text.`
                       <div className="flex items-center gap-2 text-red-400 text-sm">
                         <AlertCircle className="w-4 h-4" />
                         <span>{t.errorOccurred}</span>
+                      </div>
+                    )}
+
+                    {currentProject.status === 'cancelled' && (
+                      <div className="flex items-center gap-2 text-amber-400 text-sm">
+                        <AlertCircle className="w-4 h-4" />
+                        <span>{t.generationCancelled}</span>
                       </div>
                     )}
                   </div>
@@ -870,8 +940,12 @@ Return only the revised full chapter text.`
                       <p className="text-gray-400 text-sm mb-4 line-clamp-2">{project.idea}</p>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-gray-500">{project.chapters.length} {t.chapters}</span>
-                        <span className={`text-sm font-semibold ${project.status === 'complete' ? 'text-green-400' : 'text-purple-400'}`}>
-                          {project.status === 'complete' ? t.complete : t.generating}
+                        <span className={`text-sm font-semibold ${project.status === 'complete' ? 'text-green-400' : project.status === 'cancelled' ? 'text-amber-400' : 'text-purple-400'}`}>
+                          {project.status === 'complete'
+                            ? t.complete
+                            : project.status === 'cancelled'
+                              ? t.generationCancelled
+                              : t.generating}
                         </span>
                       </div>
                     </CardContent>

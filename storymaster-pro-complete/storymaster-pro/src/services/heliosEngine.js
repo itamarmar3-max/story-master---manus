@@ -4,6 +4,12 @@
 import { generateWithRetry } from './apiService.js'
 import { buildContinuityPacket, createInitialMemoryState, updateStoryMemory } from './storyMemoryService.js'
 
+const throwIfGenerationAborted = (options = {}) => {
+  if (typeof options.shouldAbort === 'function' && options.shouldAbort()) {
+    throw new Error('Generation cancelled by user')
+  }
+}
+
 const parseJsonFromResponse = (response, label = 'AI JSON') => {
   const markdownMatch = response.match(/```json\s*([\s\S]*?)\s*```/)
   const contentToParse = markdownMatch ? markdownMatch[1] : response
@@ -174,6 +180,7 @@ export const generateFullStory = async (premise, config, onProgress, generationO
     let memoryState = createInitialMemoryState(premise, restConfig)
 
     for (let i = 0; i < totalChapters; i++) {
+      throwIfGenerationAborted(options)
       const chapterNumber = i + 1
       const startBeat = i * beatsPerChapter
       const endBeat = Math.min((i + 1) * beatsPerChapter, beats.length)
@@ -187,7 +194,9 @@ export const generateFullStory = async (premise, config, onProgress, generationO
       })
 
       const continuityPacket = buildContinuityPacket(memoryState, chapterNumber)
+      throwIfGenerationAborted(options)
       const chapterContent = await generateChapter(chapterNumber, chapterBeats, allContext, restConfig, continuityPacket, options)
+      throwIfGenerationAborted(options)
 
       const chapter = {
         id: chapterNumber,
@@ -198,6 +207,7 @@ export const generateFullStory = async (premise, config, onProgress, generationO
 
       chapters.push(chapter)
       memoryState = await updateStoryMemory(memoryState, chapter, options)
+      throwIfGenerationAborted(options)
 
       if (onProgress.onChapterComplete) {
         onProgress.onChapterComplete(chapter)
