@@ -5,13 +5,24 @@ import { Label } from '@/components/ui/label.jsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog.jsx'
 import { Settings, Key, Sparkles, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
-import { getApiKeys, saveApiKeys, getApiSettings, saveApiSettings, fetchOpenRouterModels, fetchOpenRouterFreeModels, API_PROVIDERS } from '../services/apiService'
+import {
+  getApiKeys,
+  saveApiKeys,
+  getApiSettings,
+  saveApiSettings,
+  fetchOpenRouterModels,
+  fetchOpenRouterFreeModels,
+  validateProviderConnection,
+  API_PROVIDERS,
+  getDefaultModelForProvider,
+} from '../services/apiService'
 
 export function ApiSettings({ isOpen, onClose, language = 'en' }) {
   const [apiKeys, setApiKeys] = useState({})
   const [settings, setSettings] = useState({})
   const [models, setModels] = useState([])
   const [loadingModels, setLoadingModels] = useState(false)
+  const [testingConnection, setTestingConnection] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState(null)
 
   const translations = {
@@ -23,6 +34,7 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
       model: 'Model',
       temperature: 'Temperature',
       save: 'Save Settings',
+      testConnection: 'Test Connection',
       loadModels: 'Load Models',
       loadFreeModels: 'Load Free Models',
       openrouter: 'OpenRouter (Recommended)',
@@ -45,6 +57,7 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
       model: 'מודל',
       temperature: 'טמפרטורה',
       save: 'שמור הגדרות',
+      testConnection: 'בדוק חיבור',
       loadModels: 'טען מודלים',
       loadFreeModels: 'טען מודלים חינמיים',
       openrouter: 'OpenRouter (מומלץ)',
@@ -64,12 +77,44 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
   const t = translations[language]
 
   useEffect(() => {
+    const loadedSettings = getApiSettings()
+    const provider = loadedSettings.provider || API_PROVIDERS.OPENROUTER
+
     setApiKeys(getApiKeys())
-    setSettings(getApiSettings())
+    setSettings({
+      ...loadedSettings,
+      provider,
+      model: loadedSettings.model || getDefaultModelForProvider(provider)
+    })
   }, [])
 
+  const defaultModels = {
+    [API_PROVIDERS.OPENROUTER]: [
+      { id: 'openrouter/auto', name: 'OpenRouter Auto (Recommended)' },
+      { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
+      { id: 'openai/gpt-4-turbo', name: 'GPT-4 Turbo' },
+      { id: 'google/gemini-2.0-flash-exp:free', name: 'Gemini 2.0 Flash (Free)' },
+      { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat' }
+    ],
+    [API_PROVIDERS.GOOGLE]: [
+      { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash' },
+      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
+    ],
+    [API_PROVIDERS.DEEPSEEK]: [
+      { id: 'deepseek-chat', name: 'DeepSeek Chat' }
+    ],
+    [API_PROVIDERS.MISTRAL]: [
+      { id: 'mistral-large-latest', name: 'Mistral Large' },
+      { id: 'mistral-medium-latest', name: 'Mistral Medium' }
+    ]
+  }
+
   const handleProviderChange = (provider) => {
-    setSettings({ ...settings, provider })
+    setSettings({
+      ...settings,
+      provider,
+      model: getDefaultModelForProvider(provider)
+    })
     setModels([])
     setConnectionStatus(null)
   }
@@ -113,6 +158,27 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
     await loadModelsFromOpenRouter(fetchOpenRouterFreeModels, t.freeModelsFetched)
   }
 
+  const handleTestConnection = async () => {
+    const apiKey = apiKeys[settings.provider]
+
+    if (!apiKey) {
+      alert('Please enter an API key first')
+      return
+    }
+
+    setTestingConnection(true)
+    setConnectionStatus(null)
+
+    try {
+      await validateProviderConnection(settings.provider, apiKey, settings.model)
+      setConnectionStatus({ success: true, message: language === 'en' ? 'Connection successful' : 'החיבור הצליח' })
+    } catch (error) {
+      setConnectionStatus({ success: false, message: error.message })
+    } finally {
+      setTestingConnection(false)
+    }
+  }
+
   const handleSave = () => {
     saveApiSettings(settings)
     onClose()
@@ -123,27 +189,6 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
     [API_PROVIDERS.GOOGLE]: 'https://makersuite.google.com/app/apikey',
     [API_PROVIDERS.DEEPSEEK]: 'https://platform.deepseek.com/api_keys',
     [API_PROVIDERS.MISTRAL]: 'https://console.mistral.ai/api-keys'
-  }
-
-  const defaultModels = {
-    [API_PROVIDERS.OPENROUTER]: [
-      { id: 'openrouter/auto', name: 'OpenRouter Auto (Recommended)' },
-      { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
-      { id: 'openai/gpt-4-turbo', name: 'GPT-4 Turbo' },
-      { id: 'google/gemini-2.0-flash-exp:free', name: 'Gemini 2.0 Flash (Free)' },
-      { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat' }
-    ],
-    [API_PROVIDERS.GOOGLE]: [
-      { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash' },
-      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
-    ],
-    [API_PROVIDERS.DEEPSEEK]: [
-      { id: 'deepseek-chat', name: 'DeepSeek Chat' }
-    ],
-    [API_PROVIDERS.MISTRAL]: [
-      { id: 'mistral-large-latest', name: 'Mistral Large' },
-      { id: 'mistral-medium-latest', name: 'Mistral Medium' }
-    ]
   }
 
   const availableModels = models.length > 0 ? models : (defaultModels[settings.provider] || [])
@@ -214,17 +259,7 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
                 disabled={!apiKeys[settings.provider] || loadingModels}
                 className="w-full bg-purple-600 hover:bg-purple-700"
               >
-                {loadingModels ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    {t.loadModels}
-                  </>
-                )}
+                {loadingModels ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Loading...</> : <><Sparkles className="w-4 h-4 mr-2" />{t.loadModels}</>}
               </Button>
 
               <Button
@@ -233,30 +268,25 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
                 variant="outline"
                 className="w-full border-white/20 hover:bg-white/10"
               >
-                {loadingModels ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    {t.loadFreeModels}
-                  </>
-                )}
+                {loadingModels ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Loading...</> : <><Sparkles className="w-4 h-4 mr-2" />{t.loadFreeModels}</>}
               </Button>
             </div>
           )}
+
+          <Button
+            onClick={handleTestConnection}
+            disabled={!apiKeys[settings.provider] || testingConnection}
+            variant="outline"
+            className="w-full border-white/20 hover:bg-white/10"
+          >
+            {testingConnection ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Loading...</> : t.testConnection}
+          </Button>
 
           {connectionStatus && (
             <div className={`flex items-center gap-2 p-3 rounded-lg ${
               connectionStatus.success ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
             }`}>
-              {connectionStatus.success ? (
-                <CheckCircle className="w-5 h-5" />
-              ) : (
-                <AlertCircle className="w-5 h-5" />
-              )}
+              {connectionStatus.success ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
               <span className="text-sm">{connectionStatus.message}</span>
             </div>
           )}

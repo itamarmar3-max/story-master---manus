@@ -1,10 +1,9 @@
 // Hades Engine - Adult/Erotic Story Generation
-// Implements the Dual-Helix method for explicit content
+// Implements the Dual-Helix method for mature story generation with continuity memory
 
 import { generateWithRetry } from './apiService.js'
+import { buildContinuityPacket, createInitialMemoryState, updateStoryMemory } from './storyMemoryService.js'
 
-
-// Helper function to parse potentially wrapped JSON responses
 const parseJsonFromResponse = (response, errorLabel) => {
   const markdownMatch = response.match(/```json\s*([\s\S]*?)\s*```/)
   const contentToParse = markdownMatch ? markdownMatch[1] : response
@@ -16,59 +15,61 @@ const parseJsonFromResponse = (response, errorLabel) => {
     throw new Error(`${errorLabel}: no JSON object found`)
   }
 
-  const jsonString = contentToParse.substring(startIndex, endIndex + 1)
+  const jsonString = contentToParse
+    .substring(startIndex, endIndex + 1)
+    .replace(/,\s*([}\]])/g, '$1')
+
   return JSON.parse(jsonString)
 }
 
+const requestJson = async (prompt, options, label) => {
+  const response = await generateWithRetry([{ role: 'user', content: prompt }], options)
+
+  try {
+    return parseJsonFromResponse(response, label)
+  } catch {
+    const repaired = await generateWithRetry([
+      { role: 'system', content: 'Convert to strict valid JSON only, no markdown.' },
+      { role: 'user', content: response }
+    ], { ...options, temperature: 0 })
+
+    return parseJsonFromResponse(repaired, `${label} (repair)`)
+  }
+}
 
 const getStyleDirective = (styleMode) => {
   switch (styleMode) {
     case 'pornographic':
-      return 'Prioritize raw arousal, direct body language, and explicit erotic momentum while keeping character motivations coherent.'
+      return 'Prioritize raw arousal and direct sensual prose while maintaining coherent character psychology.'
     case 'classic-literary':
-      return 'Prioritize elegant literary prose, emotional nuance, and restrained sensual rhythm while preserving mature intimacy.'
+      return 'Use elegant literary prose with emphasis on emotional nuance and restrained sensuality.'
     default:
-      return 'Balance erotic intensity and literary storytelling with strong emotional continuity.'
+      return 'Balance sensual intensity with literary storytelling and emotional continuity.'
   }
 }
 
 const getExplicitnessDirective = (explicitnessMode) => {
   switch (explicitnessMode) {
     case 'maximum':
-      return 'Maximum explicitness: no euphemistic fade-outs, direct descriptions of acts, and complete scene progression from initiation to aftermath.'
+      return 'Use highly direct mature descriptions with no fade-outs in intimate scenes.'
     case 'uncensored':
-      return 'Uncensored explicitness: direct terminology is allowed and scenes should stay fully on-page when intimacy occurs.'
+      return 'Use direct mature language where appropriate and keep intimate scenes on-page.'
     default:
-      return 'Literary-erotic explicitness: sensual and mature with optional selective restraint where it improves narrative impact.'
+      return 'Use sensual mature language with optional restraint when it improves narrative quality.'
   }
 }
 
-// Step 1: Erotic Blueprinting
 export const createEroticBlueprint = async (premise, config, options = {}) => {
-  const prompt = `You are the Hades Narrative Engine, specialized in creating visceral, arousing, and emotionally compelling erotic narratives.
+  const prompt = `You are the Hades Narrative Engine.
 
-USER'S PREMISE: "${premise}"
-
+PREMISE: "${premise}"
 EROTIC CONFIGURATION:
 - Primary Genre: ${config.eroticGenre}
 - Kinks & Fetishes: ${config.kinks}
 - Intensity Level: ${config.intensityLevel}
 - Power Dynamic: ${config.powerDynamic}
-- Target Word Count: ${config.targetWordCount} words
 
-YOUR TASK - STEP 1: EROTIC BLUEPRINTING
-
-Analyze this premise and identify its EROTIC CORE. Answer these questions:
-
-1. **Central Fantasy**: What is the central fantasy or desire this story is meant to fulfill?
-2. **External Conflict**: What is the main plot/external story?
-3. **Intimate Conflict**: What is the primary sexual/romantic tension?
-4. **The Weave**: How will the external plot force characters into situations that escalate intimacy?
-
-CORE PHILOSOPHY:
-The plot serves the intimacy, and the intimacy serves the plot. Sex is the engine, not the passenger.
-
-Return as JSON:
+Return ONLY JSON:
 {
   "centralFantasy": "...",
   "externalConflict": "...",
@@ -76,51 +77,17 @@ Return as JSON:
   "plotIntimacyWeave": "...",
   "theme": "...",
   "desiredEmotionalJourney": "..."
+}`
+
+  return await requestJson(prompt, { ...options, temperature: 0.7, maxTokens: 2400 }, 'EroticBlueprint')
 }
 
-Return ONLY valid JSON.`
-
-  const messages = [{ role: 'user', content: prompt }]
-  const response = await generateWithRetry(messages, { ...options, temperature: 0.7 })
-  
-  try {
-    return parseJsonFromResponse(response, 'Invalid blueprint format from AI')
-  } catch (error) {
-    console.error('Failed to parse erotic blueprint JSON:', error)
-    throw new Error('Invalid blueprint format from AI')
-  }
-}
-
-// Step 2: Libidinal Profiling
 export const createLibidinalProfiles = async (premise, blueprint, config, options = {}) => {
-  const prompt = `You are the Hades Narrative Engine. Continue building the erotic story.
-
+  const prompt = `Continue the same story.
 PREMISE: "${premise}"
 BLUEPRINT: ${JSON.stringify(blueprint, null, 2)}
 
-YOUR TASK - STEP 2: LIBIDINAL PROFILING
-
-Create deeply detailed profiles for the main characters, focusing on their sexual and emotional psychology.
-
-For each MAIN CHARACTER (2-3 characters), provide:
-
-STANDARD PROFILE:
-- Name, age, appearance
-- Background
-- Motivations
-- Fears
-- Secrets
-
-LIBIDINAL PROFILE (MANDATORY):
-- Sexual history & experience level
-- Core desires (conscious & subconscious)
-- Hard limits & boundaries
-- Triggers & turn-ons
-- Erotic archetype (e.g., The Innocent, The Seducer, The Protector, The Corruptor)
-- How they express desire
-- What they need emotionally from intimacy
-
-Return as JSON:
+Return ONLY JSON:
 {
   "characters": [
     {
@@ -136,206 +103,137 @@ Return as JSON:
         "experienceLevel": "...",
         "consciousDesires": "...",
         "subconsciousDesires": "...",
-        "hardLimits": ["...", "..."],
-        "turnOns": ["...", "..."],
+        "hardLimits": ["..."],
+        "turnOns": ["..."],
         "eroticArchetype": "...",
         "expressionOfDesire": "...",
         "emotionalNeeds": "..."
       }
     }
   ]
+}`
+
+  return await requestJson(prompt, { ...options, temperature: 0.75, maxTokens: 3200 }, 'EroticProfiles')
 }
 
-Return ONLY valid JSON.`
-
-  const messages = [{ role: 'user', content: prompt }]
-  const response = await generateWithRetry(messages, { ...options, temperature: 0.8 })
-  
-  try {
-    return parseJsonFromResponse(response, 'Invalid profiles format from AI')
-  } catch (error) {
-    console.error('Failed to parse profiles JSON:', error)
-    throw new Error('Invalid profiles format from AI')
-  }
-}
-
-// Step 3: Dual-Helix Plotting
 export const createDualHelixPlot = async (premise, blueprint, profiles, config, options = {}) => {
-  const prompt = `You are the Hades Narrative Engine. Continue building the erotic story.
-
+  const prompt = `Continue the same story.
 PREMISE: "${premise}"
 BLUEPRINT: ${JSON.stringify(blueprint, null, 2)}
 CHARACTERS: ${JSON.stringify(profiles, null, 2)}
 
-YOUR TASK - STEP 3: DUAL-HELIX PLOTTING
-
-Create two parallel but interconnected outlines:
-1. EXTERNAL PLOT: The main story events
-2. INTIMATE PLOT: The sexual and romantic relationship progression
-
-These must be EXPLICITLY LINKED. Each external event should create an opportunity for intimate escalation.
-
-Intimate Plot Progression (typical beats):
-- First Accidental Touch
-- Building Tension (longing, loaded dialogue)
-- The First Kiss
-- Confession of Desire
-- First Intimate Scene (may start vanilla)
-- Introduction of Kink (if applicable)
-- Escalation Scenes
-- Full Surrender Scene
-- Post-Coital Conflict/Vulnerability
-- Resolution
-
-Create 15-25 beats total. Each beat should specify:
-- Scene type: "Charge" (tension building), "Release" (explicit), or "Plot" (external story)
-- External event
-- Intimate development
-- How they connect
-
-Return as JSON:
+Create 15-25 beats with linked plot+intimacy progression.
+Return ONLY JSON:
 {
   "totalBeats": 20,
   "beats": [
     {
       "beatNumber": 1,
-      "sceneType": "Plot",
+      "sceneType": "Charge",
       "externalEvent": "...",
       "intimateDevelopment": "...",
       "connection": "...",
       "emotionalTone": "..."
     }
   ]
+}`
+
+  return await requestJson(prompt, { ...options, temperature: 0.7, maxTokens: 4200 }, 'DualHelixPlot')
 }
 
-Return ONLY valid JSON.`
+export const generateEroticChapter = async (chapterNumber, beats, allContext, config, continuityPacket, options = {}) => {
+  const hasReleaseScene = beats.some((b) => b.sceneType === 'Release')
 
-  const messages = [{ role: 'user', content: prompt }]
-  const response = await generateWithRetry(messages, { ...options, temperature: 0.7, maxTokens: 6000 })
-  
-  try {
-    return parseJsonFromResponse(response, 'Invalid plot format from AI')
-  } catch (error) {
-    console.error('Failed to parse plot JSON:', error)
-    throw new Error('Invalid plot format from AI')
-  }
-}
-
-// Step 4: Generate Chapter with Uncensored Mandate
-export const generateEroticChapter = async (chapterNumber, beats, allContext, config, options = {}) => {
-  const sceneTypes = beats.map(b => b.sceneType).join(', ')
-  const hasReleaseScene = beats.some(b => b.sceneType === 'Release')
-  
-  const prompt = `You are the Hades Narrative Engine. Write the actual erotic story content.
+  const prompt = `You are the Hades Narrative Engine. Write Chapter ${chapterNumber}.
 
 CONTEXT:
 ${JSON.stringify(allContext, null, 2)}
 
-YOUR TASK - STEP 4: NARRATIVE WEAVING
-
-Write Chapter ${chapterNumber}. This chapter covers these beats:
+BEATS:
 ${JSON.stringify(beats, null, 2)}
 
-Scene types in this chapter: ${sceneTypes}
+CONTINUITY MEMORY (MANDATORY):
+${JSON.stringify(continuityPacket, null, 2)}
 
-WRITING GUIDELINES:
-1. **Psychological Interiority**: Show what characters think and feel during intimate moments
-2. **Sensory Immersion**: All five senses, especially touch, taste, smell
-3. **Emotional Connection**: Connect physical sensations to emotional states
-4. **Power Dynamic**: Respect and explore the ${config.powerDynamic} dynamic
-5. **Consequence**: Every intimate scene must change the relationship
-6. **Style Mode**: ${config.styleMode || 'balanced'}. ${getStyleDirective(config.styleMode)}
-7. **Explicitness Mode**: ${config.explicitnessMode || 'literary-erotic'}. ${getExplicitnessDirective(config.explicitnessMode)}
+GUIDELINES:
+- Power dynamic: ${config.powerDynamic}
+- Style mode: ${config.styleMode || 'balanced'} (${getStyleDirective(config.styleMode)})
+- Explicitness mode: ${config.explicitnessMode || 'literary-erotic'} (${getExplicitnessDirective(config.explicitnessMode)})
+- Intensity level: ${config.intensityLevel}
+- Kinks to incorporate where relevant: ${config.kinks}
+- Keep continuity with the previous chapter ending and unresolved threads.
 
-${hasReleaseScene ? `
-RELEASE-SCENE MANDATE:
-This chapter contains a "Release" scene. You MUST:
-- Keep the scene on-page with clear progression and aftermath
-- Match descriptive intensity to Explicitness Mode and Intensity Level
-- Keep consent, boundaries, and emotional consequence visible in the prose
+${hasReleaseScene ? 'This chapter contains a release beat: keep emotional consequences and clear progression visible.' : ''}
 
-Intensity Level: ${config.intensityLevel}
-Kinks to incorporate: ${config.kinks}
-` : ''}
+Write approximately ${Math.floor(parseInt(config.targetWordCount) / 15)} words.
+Return only chapter text.`
 
-Write the chapter as polished, arousing prose. Aim for approximately ${Math.floor(parseInt(config.targetWordCount) / 15)} words.
-
-Return the chapter text directly, no JSON wrapper.`
-
-  const messages = [{ role: 'user', content: prompt }]
-  return await generateWithRetry(messages, { ...options, temperature: 0.95, maxTokens: 8000 })
+  return await generateWithRetry([{ role: 'user', content: prompt }], { ...options, temperature: 0.9, maxTokens: 8000 })
 }
 
-// Main orchestration function for adult stories
 export const generateAdultStory = async (premise, config, onProgress) => {
   try {
     const { apiKey, ...restConfig } = config
     const options = apiKey ? { apiKey } : {}
 
-    // Step 1: Erotic Blueprint
     onProgress({ stage: 'blueprint', progress: 10, message: 'Creating erotic blueprint...' })
     const blueprint = await createEroticBlueprint(premise, restConfig, options)
-    
-    // Step 2: Libidinal Profiles
+
     onProgress({ stage: 'profiles', progress: 20, message: 'Developing character desires...' })
     const profiles = await createLibidinalProfiles(premise, blueprint, restConfig, options)
-    
-    // Step 3: Dual-Helix Plot
+
     onProgress({ stage: 'plot', progress: 30, message: 'Weaving plot and intimacy...' })
     const plot = await createDualHelixPlot(premise, blueprint, profiles, restConfig, options)
-    
-    // Combine all context
-    const allContext = {
-      premise,
-      config,
-      blueprint,
-      profiles,
-      plot
-    }
-    
-    // Step 4: Generate chapters
+
+    const allContext = { premise, config, blueprint, profiles, plot }
     const totalChapters = 15
     const chapters = []
-    const beatsPerChapter = Math.ceil(plot.beats.length / totalChapters)
-    
+    const beats = Array.isArray(plot.beats) ? plot.beats : []
+    const beatsPerChapter = Math.max(1, Math.ceil(beats.length / totalChapters))
+    let memoryState = createInitialMemoryState(premise, restConfig)
+
     for (let i = 0; i < totalChapters; i++) {
       const chapterNumber = i + 1
       const startBeat = i * beatsPerChapter
-      const endBeat = Math.min((i + 1) * beatsPerChapter, plot.beats.length)
-      const chapterBeats = plot.beats.slice(startBeat, endBeat)
-      
-      onProgress({ 
-        stage: 'generation', 
-        progress: 30 + ((chapterNumber / totalChapters) * 70), 
+      const endBeat = Math.min((i + 1) * beatsPerChapter, beats.length)
+      const chapterBeats = beats.slice(startBeat, endBeat)
+
+      onProgress({
+        stage: 'generation',
+        progress: 30 + ((chapterNumber / totalChapters) * 70),
         message: `Writing Chapter ${chapterNumber}/${totalChapters}...`,
         currentChapter: chapterNumber
       })
-      
-      const chapterContent = await generateEroticChapter(chapterNumber, chapterBeats, allContext, restConfig, options)
-      
-      chapters.push({
+
+      const continuityPacket = buildContinuityPacket(memoryState, chapterNumber)
+      const chapterContent = await generateEroticChapter(chapterNumber, chapterBeats, allContext, restConfig, continuityPacket, options)
+
+      const chapter = {
         id: chapterNumber,
-        title: `Chapter ${chapterNumber}`,
+        title: chapterBeats?.[0]?.externalEvent ? `Chapter ${chapterNumber}: ${chapterBeats[0].externalEvent}` : `Chapter ${chapterNumber}`,
         content: chapterContent,
         status: 'complete'
-      })
-      
-      // Yield chapter as it's completed
+      }
+
+      chapters.push(chapter)
+      memoryState = await updateStoryMemory(memoryState, chapter, options)
+
       if (onProgress.onChapterComplete) {
-        onProgress.onChapterComplete(chapters[chapters.length - 1])
+        onProgress.onChapterComplete(chapter)
       }
     }
-    
+
     onProgress({ stage: 'complete', progress: 100, message: 'Story generation complete!' })
-    
+
     return {
-      metadata: allContext,
-      chapters
+      metadata: {
+        ...allContext,
+        memoryState,
+      },
+      chapters,
     }
-    
   } catch (error) {
     console.error('Adult story generation error:', error)
     throw error
   }
 }
-
