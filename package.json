@@ -1,0 +1,8 @@
+{
+  "name": "storymaster-monorepo-root",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix storymaster-pro-complete/storymaster-pro ci && npm --prefix storymaster-pro-complete/storymaster-pro run build",
+    "dev": "npm --prefix storymaster-pro-complete/storymaster-pro run dev"
+  }
+}
