@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm run install:app",
+  "buildCommand": "npm run build",
+  "outputDirectory": "storymaster-pro-complete/storymaster-pro/dist"
+}

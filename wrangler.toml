@@ -3,4 +3,4 @@ compatibility_date = "2026-03-07"
 pages_build_output_dir = "storymaster-pro-complete/storymaster-pro/dist"
 
 [build]
-command = "cd storymaster-pro-complete/storymaster-pro && npm ci && npm run build"
+command = "npm run install:app && npm run build"
