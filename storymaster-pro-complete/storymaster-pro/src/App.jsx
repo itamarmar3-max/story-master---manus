@@ -7,12 +7,12 @@ import { Textarea } from '@/components/ui/textarea.jsx'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { Progress } from '@/components/ui/progress.jsx'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog.jsx'
-import { BookOpen, Globe, Sparkles, Library, Settings, ChevronRight, Loader2, Book, Edit3, Key, Download, Trash2, AlertCircle } from 'lucide-react'
+import { BookOpen, Globe, Sparkles, Library, Settings, ChevronRight, Loader2, Book, Edit3, Key, Download, Trash2, AlertCircle, WandSparkles, RefreshCw } from 'lucide-react'
 import { ApiSettings } from './components/ApiSettings.jsx'
 import { ChapterEditor } from './components/ChapterEditor.jsx'
 import { generateFullStory } from './services/heliosEngine.js'
 import { generateAdultStory } from './services/hadesEngine.js'
-import { getApiKeys, getApiSettings } from './services/apiService.js'
+import { generateWithRetry, getApiKeys, getApiSettings } from './services/apiService.js'
 import { exportStory } from './services/exportService.js'
 import './App.css'
 
@@ -29,6 +29,8 @@ function App() {
   const [selectedChapter, setSelectedChapter] = useState(null)
   const [showChapterEditor, setShowChapterEditor] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
+  const [isUpgradingPrompt, setIsUpgradingPrompt] = useState(false)
+  const [isRegeneratingChapter, setIsRegeneratingChapter] = useState(false)
   
   const [config, setConfig] = useState({
     title: '',
@@ -103,7 +105,16 @@ function App() {
       deleteProject: 'Delete Project',
       deleteConfirm: 'Are you sure you want to delete this project?',
       error: 'Error',
-      errorOccurred: 'An error occurred during generation'
+      errorOccurred: 'An error occurred during generation',
+      upgradePrompt: 'Upgrade Prompt',
+      upgradingPrompt: 'Upgrading prompt...',
+      storySettings: 'Story Settings Snapshot',
+      selectedModel: 'Selected Model',
+      selectedProvider: 'Selected Provider',
+      promptLabel: 'Original Prompt',
+      chapterRegenerating: 'Regenerating chapter...',
+      chapterRegenDone: 'Chapter regenerated successfully',
+      chapterRegenError: 'Failed to regenerate chapter'
     },
     he: {
       appTitle: 'StoryMaster Pro',
@@ -148,7 +159,16 @@ function App() {
       deleteProject: 'מחק פרויקט',
       deleteConfirm: 'האם אתה בטוח שברצונך למחוק פרויקט זה?',
       error: 'שגיאה',
-      errorOccurred: 'אירעה שגיאה במהלך היצירה'
+      errorOccurred: 'אירעה שגיאה במהלך היצירה',
+      upgradePrompt: 'שדרג פרומפט',
+      upgradingPrompt: 'משדרג פרומפט...',
+      storySettings: 'תמונת מצב ההגדרות',
+      selectedModel: 'מודל נבחר',
+      selectedProvider: 'ספק נבחר',
+      promptLabel: 'פרומפט מקורי',
+      chapterRegenerating: 'יוצר מחדש פרק...',
+      chapterRegenDone: 'הפרק נוצר מחדש בהצלחה',
+      chapterRegenError: 'יצירה מחדש של הפרק נכשלה'
     }
   }
 
@@ -174,6 +194,35 @@ function App() {
     }
   }
 
+  const handleUpgradePrompt = async () => {
+    if (!storyIdea.trim()) {
+      return
+    }
+
+    const apiSettings = getApiSettings()
+    const apiKeys = getApiKeys()
+    if (!apiSettings?.provider || !apiKeys?.[apiSettings.provider]) {
+      alert(t.apiNotConfigured)
+      setShowApiSettings(true)
+      return
+    }
+
+    setIsUpgradingPrompt(true)
+    try {
+      const upgraded = await generateWithRetry([
+        { role: 'system', content: language === 'en' ? 'Rewrite user story prompts into richer, clearer creative briefs. Preserve intent. Return only the upgraded prompt text.' : 'שכתב פרומפטים לסיפור לגרסה עשירה ומדויקת יותר. שמור על הכוונה המקורית. החזר רק את הטקסט המשופר.' },
+        { role: 'user', content: storyIdea }
+      ], { provider: apiSettings.provider, model: apiSettings.model, temperature: 0.5, maxTokens: 1200 })
+
+      if (upgraded?.trim()) {
+        setStoryIdea(upgraded.trim())
+      }
+    } catch (error) {
+      alert(`${t.error}: ${error.message}`)
+    } finally {
+      setIsUpgradingPrompt(false)
+    }
+  }
 
   const isConfigComplete = isAdultMode
     ? Boolean(config.title && config.eroticGenre && config.intensityLevel && config.powerDynamic && config.targetWordCount)
@@ -200,6 +249,7 @@ function App() {
       title: config.title || 'Untitled Story',
       idea: storyIdea,
       config: { ...config },
+      apiSettings: { provider: apiSettings.provider, model: apiSettings.model },
       isAdult: isAdultMode,
       chapters: [],
       progress: 0,
@@ -225,9 +275,10 @@ function App() {
         })
       }
       
+      const generationOptions = { provider: apiSettings.provider, model: apiSettings.model }
       const result = isAdultMode 
-        ? await generateAdultStory(storyIdea, config, progressCallback)
-        : await generateFullStory(storyIdea, config, progressCallback)
+        ? await generateAdultStory(storyIdea, config, progressCallback, generationOptions)
+        : await generateFullStory(storyIdea, config, progressCallback, generationOptions)
       
       setCurrentProject(prev => {
         const updated = { ...prev, status: 'complete', chapters: result.chapters, metadata: result.metadata }
@@ -269,48 +320,73 @@ function App() {
       throw new Error(`Chapter ${chapterId} was not found`)
     }
 
-    const combinedIdea = instructions?.trim()
-      ? `${currentProject.idea}
+    const previousChapter = currentProject.chapters.find((chapter) => chapter.id === chapterId - 1)
+    const nextChapter = currentProject.chapters.find((chapter) => chapter.id === chapterId + 1)
+    const apiSettings = currentProject.apiSettings || getApiSettings()
 
-Revision request: ${instructions.trim()}`
-      : currentProject.idea
+    setIsRegeneratingChapter(true)
 
-    const regenerationConfig = {
-      ...currentProject.config,
-      title: currentProject.title,
-      language,
-    }
+    try {
+      const prompt = `You are editing only one chapter in an existing novel.
+Do not rewrite other chapters. Preserve the global story structure, character arcs, unresolved threads, and chronology.
 
-    const progressHandler = () => {}
-    const generationFn = currentProject.isAdult ? generateAdultStory : generateFullStory
+Book idea:
+${currentProject.idea}
 
-    const regeneratedStory = await generationFn(combinedIdea, regenerationConfig, progressHandler)
-    const regeneratedChapter = regeneratedStory.chapters.find((chapter) => chapter.id === chapterId)
+Book configuration:
+${JSON.stringify(currentProject.config, null, 2)}
 
-    if (!regeneratedChapter) {
-      throw new Error('Regenerated chapter content was not returned')
-    }
+Current chapter title:
+${chapterToRegenerate.title}
 
-    setCurrentProject((prev) => {
-      const updatedProject = {
-        ...prev,
-        chapters: prev.chapters.map((chapter) =>
-          chapter.id === chapterId
-            ? { ...chapter, content: regeneratedChapter.content }
-            : chapter,
-        ),
+Previous chapter (for continuity):
+${previousChapter?.content || 'N/A'}
+
+Current chapter to improve:
+${chapterToRegenerate.content}
+
+Next chapter (must still fit after rewrite):
+${nextChapter?.content || 'N/A'}
+
+User revision instructions:
+${instructions?.trim() || 'Improve the chapter while keeping continuity and style.'}
+
+Return only the revised full chapter text.`
+
+      const revisedContent = await generateWithRetry([{ role: 'user', content: prompt }], {
+        provider: apiSettings.provider,
+        model: apiSettings.model,
+        temperature: 0.75,
+        maxTokens: 8000,
+      })
+
+      if (!revisedContent?.trim()) {
+        throw new Error('Regenerated chapter content was empty')
       }
 
-      setProjects((prevProjects) =>
-        prevProjects.map((project) => (project.id === updatedProject.id ? updatedProject : project)),
-      )
+      setCurrentProject((prev) => {
+        const updatedProject = {
+          ...prev,
+          chapters: prev.chapters.map((chapter) =>
+            chapter.id === chapterId
+              ? { ...chapter, content: revisedContent.trim() }
+              : chapter,
+          ),
+        }
 
-      return updatedProject
-    })
+        setProjects((prevProjects) =>
+          prevProjects.map((project) => (project.id === updatedProject.id ? updatedProject : project)),
+        )
 
-    setSelectedChapter((prev) => (prev && prev.id === chapterId
-      ? { ...prev, content: regeneratedChapter.content }
-      : prev))
+        return updatedProject
+      })
+
+      setSelectedChapter((prev) => (prev && prev.id === chapterId
+        ? { ...prev, content: revisedContent.trim() }
+        : prev))
+    } finally {
+      setIsRegeneratingChapter(false)
+    }
   }
 
   const handleExport = async (format) => {
@@ -419,10 +495,16 @@ Revision request: ${instructions.trim()}`
 
             <div className="relative">
               <Textarea value={storyIdea} onChange={(e) => setStoryIdea(e.target.value)} placeholder={t.onboardingPlaceholder} className="min-h-[200px] bg-white/5 border-white/10 text-white placeholder:text-gray-500 text-lg resize-none focus:border-purple-500/50 focus:ring-purple-500/20 transition-all" onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { handleSubmitIdea() } }} />
-              <Button onClick={handleSubmitIdea} disabled={!storyIdea.trim()} className="mt-4 w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-6 text-lg transition-all transform hover:scale-[1.02]">
-                {t.startCreating}
-                <ChevronRight className="w-5 h-5 ml-2" />
-              </Button>
+              <div className="mt-4 grid md:grid-cols-2 gap-3">
+                <Button onClick={handleUpgradePrompt} disabled={!storyIdea.trim() || isUpgradingPrompt} variant="outline" className="border-white/20 hover:bg-white/10 text-white font-semibold py-6 text-lg">
+                  {isUpgradingPrompt ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <WandSparkles className="w-5 h-5 mr-2" />}
+                  {isUpgradingPrompt ? t.upgradingPrompt : t.upgradePrompt}
+                </Button>
+                <Button onClick={handleSubmitIdea} disabled={!storyIdea.trim()} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-6 text-lg transition-all transform hover:scale-[1.02]">
+                  {t.startCreating}
+                  <ChevronRight className="w-5 h-5 ml-2" />
+                </Button>
+              </div>
             </div>
 
             {projects.length > 0 && (
@@ -674,6 +756,14 @@ Revision request: ${instructions.trim()}`
                       </div>
                       <Progress value={currentProject.progress} className="h-2" />
                     </div>
+
+                    <div className="bg-black/20 border border-white/10 rounded-lg p-3 space-y-2 text-xs">
+                      <p className="text-purple-300 font-semibold">{t.storySettings}</p>
+                      <p className="text-gray-300"><span className="text-gray-400">{t.selectedProvider}:</span> {currentProject.apiSettings?.provider || 'N/A'}</p>
+                      <p className="text-gray-300 break-all"><span className="text-gray-400">{t.selectedModel}:</span> {currentProject.apiSettings?.model || 'N/A'}</p>
+                      <p className="text-gray-300"><span className="text-gray-400">{t.promptLabel}:</span></p>
+                      <p className="text-gray-400 whitespace-pre-wrap max-h-28 overflow-y-auto">{currentProject.idea}</p>
+                    </div>
                     
                     {currentProject.status === 'generating' && (
                       <div className="space-y-2">
@@ -718,10 +808,16 @@ Revision request: ${instructions.trim()}`
                               <p className="text-gray-400 text-sm truncate">{chapter.content.substring(0, 80)}...</p>
                             </div>
                           </div>
-                          <Button variant="ghost" size="sm" className="hover:bg-white/10 flex-shrink-0" onClick={() => openChapterEditor(chapter)}>
-                            <Edit3 className="w-4 h-4 mr-2" />
-                            {t.readEdit}
-                          </Button>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <Button variant="ghost" size="sm" className="hover:bg-white/10" onClick={() => openChapterEditor(chapter)}>
+                              <Edit3 className="w-4 h-4 mr-2" />
+                              {t.readEdit}
+                            </Button>
+                            <Button variant="ghost" size="sm" disabled={isRegeneratingChapter} className="hover:bg-white/10 text-purple-300" onClick={() => handleRegenerateChapter(chapter.id, '')}>
+                              {isRegeneratingChapter ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                              {language === 'en' ? 'Quick Regenerate' : 'יצירה מחדש מהירה'}
+                            </Button>
+                          </div>
                         </CardContent>
                       </Card>
                     ))}

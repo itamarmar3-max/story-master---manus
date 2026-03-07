@@ -152,10 +152,10 @@ function getChapterTitle(chapterNumber, beats) {
   return firstBeatTitle ? `Chapter ${chapterNumber}: ${firstBeatTitle}` : `Chapter ${chapterNumber}`
 }
 
-export const generateFullStory = async (premise, config, onProgress) => {
+export const generateFullStory = async (premise, config, onProgress, generationOptions = {}) => {
   try {
     const { apiKey, ...restConfig } = config
-    const options = apiKey ? { apiKey } : {}
+    const options = { ...(apiKey ? { apiKey } : {}), ...generationOptions }
 
     onProgress({ stage: 'blueprint', progress: 10, message: 'Creating strategic blueprint...' })
     const blueprint = await createBlueprint(premise, restConfig, options)

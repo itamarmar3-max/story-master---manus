@@ -41,7 +41,11 @@ const isModelCompatibleWithProvider = (provider, model) => {
 }
 
 const resolveModelForProvider = (provider, requestedModel) => {
-  if (isModelCompatibleWithProvider(provider, requestedModel)) {
+  if (requestedModel) {
+    if (!isModelCompatibleWithProvider(provider, requestedModel)) {
+      throw new Error(`Selected model "${requestedModel}" is not compatible with provider "${provider}".`)
+    }
+
     return requestedModel
   }
 
@@ -178,13 +182,6 @@ const generateWithOpenRouter = async (apiKey, model, messages, options = {}) => 
   try {
     return await executeRequest(requestBody)
   } catch (error) {
-    const shouldFallback = requestedModel !== DEFAULT_OPENROUTER_MODEL && /no endpoints found|not a valid model|model.*not found|provider returned error/i.test(error.message)
-
-    if (shouldFallback) {
-      console.warn(`Model "${requestedModel}" unavailable. Falling back to "${DEFAULT_OPENROUTER_MODEL}".`)
-      return await executeRequest({ ...requestBody, model: DEFAULT_OPENROUTER_MODEL })
-    }
-
     console.error('OpenRouter API Error:', error)
     throw error
   }

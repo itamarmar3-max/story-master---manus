@@ -171,10 +171,10 @@ Return only chapter text.`
   return await generateWithRetry([{ role: 'user', content: prompt }], { ...options, temperature: 0.9, maxTokens: 8000 })
 }
 
-export const generateAdultStory = async (premise, config, onProgress) => {
+export const generateAdultStory = async (premise, config, onProgress, generationOptions = {}) => {
   try {
     const { apiKey, ...restConfig } = config
-    const options = apiKey ? { apiKey } : {}
+    const options = { ...(apiKey ? { apiKey } : {}), ...generationOptions }
 
     onProgress({ stage: 'blueprint', progress: 10, message: 'Creating erotic blueprint...' })
     const blueprint = await createEroticBlueprint(premise, restConfig, options)
