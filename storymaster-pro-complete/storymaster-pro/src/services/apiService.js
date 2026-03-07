@@ -12,6 +12,67 @@ const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 const GOOGLE_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
 const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1'
 const MISTRAL_BASE_URL = 'https://api.mistral.ai/v1'
+const DEFAULT_OPENROUTER_MODEL = 'openrouter/auto'
+
+const DEFAULT_MODELS_BY_PROVIDER = {
+  [API_PROVIDERS.OPENROUTER]: DEFAULT_OPENROUTER_MODEL,
+  [API_PROVIDERS.GOOGLE]: 'gemini-2.0-flash-exp',
+  [API_PROVIDERS.DEEPSEEK]: 'deepseek-chat',
+  [API_PROVIDERS.MISTRAL]: 'mistral-large-latest'
+}
+
+export const getDefaultModelForProvider = (provider) => DEFAULT_MODELS_BY_PROVIDER[provider]
+
+const isModelCompatibleWithProvider = (provider, model) => {
+  if (!model) return false
+
+  switch (provider) {
+    case API_PROVIDERS.OPENROUTER:
+      return model.includes('/')
+    case API_PROVIDERS.GOOGLE:
+      return model.startsWith('gemini-')
+    case API_PROVIDERS.DEEPSEEK:
+      return model.startsWith('deepseek')
+    case API_PROVIDERS.MISTRAL:
+      return model.startsWith('mistral')
+    default:
+      return false
+  }
+}
+
+const resolveModelForProvider = (provider, requestedModel) => {
+  if (isModelCompatibleWithProvider(provider, requestedModel)) {
+    return requestedModel
+  }
+
+  return getDefaultModelForProvider(provider)
+}
+
+const safeJson = async (response) => {
+  const text = await response.text()
+  if (!text) {
+    return {}
+  }
+
+  try {
+    return JSON.parse(text)
+  } catch {
+    return { message: text }
+  }
+}
+
+const readApiError = async (response, fallbackLabel = 'API Error') => {
+  const payload = await safeJson(response)
+  return payload.error?.message || payload.message || `${fallbackLabel}: ${response.status} ${response.statusText}`
+}
+
+const extractTextOrThrow = (value, label) => {
+  if (!value || typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${label}: Empty response payload`)
+  }
+
+  return value
+}
 
 // Get API keys from localStorage
 export const getApiKeys = () => {
@@ -29,7 +90,7 @@ export const getApiSettings = () => {
   const settings = localStorage.getItem('storymaster_api_settings')
   return settings ? JSON.parse(settings) : {
     provider: API_PROVIDERS.OPENROUTER,
-    model: 'x-ai/grok-2-1212',
+    model: DEFAULT_OPENROUTER_MODEL,
     temperature: 0.8
   }
 }
@@ -52,7 +113,7 @@ export const fetchOpenRouterModels = async (apiKey) => {
     })
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch models: ${response.statusText}`)
+      throw new Error(await readApiError(response, 'Failed to fetch models'))
     }
 
     const data = await response.json()
@@ -63,9 +124,38 @@ export const fetchOpenRouterModels = async (apiKey) => {
   }
 }
 
+export const fetchOpenRouterFreeModels = async (apiKey) => {
+  const models = await fetchOpenRouterModels(apiKey)
+  return models.filter((model) => model.id?.includes(':free') || Number(model.pricing?.prompt) === 0)
+}
+
+export const validateProviderConnection = async (provider, apiKey, model) => {
+  const pingMessages = [{ role: 'user', content: 'Reply with the single word: OK' }]
+
+  const result = await generateText(pingMessages, {
+    provider,
+    apiKey,
+    model,
+    maxTokens: 16,
+    temperature: 0,
+  })
+
+  return { ok: true, message: result }
+}
+
 // Generate text using OpenRouter
 const generateWithOpenRouter = async (apiKey, model, messages, options = {}) => {
-  try {
+  const requestedModel = model || DEFAULT_OPENROUTER_MODEL
+
+  const requestBody = {
+    model: requestedModel,
+    messages,
+    temperature: options.temperature ?? 0.8,
+    max_tokens: options.maxTokens,
+    stream: false
+  }
+
+  const executeRequest = async (body) => {
     const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -74,23 +164,27 @@ const generateWithOpenRouter = async (apiKey, model, messages, options = {}) => 
         'HTTP-Referer': window.location.origin,
         'X-Title': 'StoryMaster Pro'
       },
-      body: JSON.stringify({
-        model: model,
-        messages: messages,
-        temperature: options.temperature || 0.8,
-        max_tokens: options.maxTokens,
-        stream: false
-      })
+      body: JSON.stringify(body)
     })
 
     if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error?.message || `API Error: ${response.statusText}`)
+      throw new Error(await readApiError(response))
     }
 
     const data = await response.json()
-    return data.choices[0].message.content
+    return extractTextOrThrow(data.choices?.[0]?.message?.content, 'OpenRouter API Error')
+  }
+
+  try {
+    return await executeRequest(requestBody)
   } catch (error) {
+    const shouldFallback = requestedModel !== DEFAULT_OPENROUTER_MODEL && /no endpoints found|not a valid model|model.*not found|provider returned error/i.test(error.message)
+
+    if (shouldFallback) {
+      console.warn(`Model "${requestedModel}" unavailable. Falling back to "${DEFAULT_OPENROUTER_MODEL}".`)
+      return await executeRequest({ ...requestBody, model: DEFAULT_OPENROUTER_MODEL })
+    }
+
     console.error('OpenRouter API Error:', error)
     throw error
   }
@@ -99,8 +193,7 @@ const generateWithOpenRouter = async (apiKey, model, messages, options = {}) => 
 // Generate text using Google Gemini
 const generateWithGoogle = async (apiKey, model, messages, options = {}) => {
   try {
-    // Convert messages to Gemini format
-    const contents = messages.map(msg => ({
+    const contents = messages.map((msg) => ({
       role: msg.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: msg.content }]
     }))
@@ -111,20 +204,20 @@ const generateWithGoogle = async (apiKey, model, messages, options = {}) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        contents: contents,
+        contents,
         generationConfig: {
-          temperature: options.temperature || 0.8,
+          temperature: options.temperature ?? 0.8,
           maxOutputTokens: options.maxTokens
         }
       })
     })
 
     if (!response.ok) {
-      throw new Error(`Google API Error: ${response.statusText}`)
+      throw new Error(await readApiError(response, 'Google API Error'))
     }
 
     const data = await response.json()
-    return data.candidates[0].content.parts[0].text
+    return extractTextOrThrow(data.candidates?.[0]?.content?.parts?.[0]?.text, 'Google API Error')
   } catch (error) {
     console.error('Google API Error:', error)
     throw error
@@ -141,19 +234,19 @@ const generateWithDeepSeek = async (apiKey, model, messages, options = {}) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: model,
-        messages: messages,
-        temperature: options.temperature || 0.8,
+        model,
+        messages,
+        temperature: options.temperature ?? 0.8,
         max_tokens: options.maxTokens
       })
     })
 
     if (!response.ok) {
-      throw new Error(`DeepSeek API Error: ${response.statusText}`)
+      throw new Error(await readApiError(response, 'DeepSeek API Error'))
     }
 
     const data = await response.json()
-    return data.choices[0].message.content
+    return extractTextOrThrow(data.choices?.[0]?.message?.content, 'DeepSeek API Error')
   } catch (error) {
     console.error('DeepSeek API Error:', error)
     throw error
@@ -170,19 +263,19 @@ const generateWithMistral = async (apiKey, model, messages, options = {}) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: model,
-        messages: messages,
-        temperature: options.temperature || 0.8,
+        model,
+        messages,
+        temperature: options.temperature ?? 0.8,
         max_tokens: options.maxTokens
       })
     })
 
     if (!response.ok) {
-      throw new Error(`Mistral API Error: ${response.statusText}`)
+      throw new Error(await readApiError(response, 'Mistral API Error'))
     }
 
     const data = await response.json()
-    return data.choices[0].message.content
+    return extractTextOrThrow(data.choices?.[0]?.message?.content, 'Mistral API Error')
   } catch (error) {
     console.error('Mistral API Error:', error)
     throw error
@@ -195,11 +288,12 @@ export const generateText = async (messages, options = {}) => {
   const settings = getApiSettings()
 
   const provider = options.provider || settings.provider
-  const model = options.model || settings.model
+  const requestedModel = options.model || settings.model
+  const model = resolveModelForProvider(provider, requestedModel)
   const apiKey = options.apiKey || apiKeys[provider]
 
   if (!apiKey) {
-    throw new Error(`No API key found for provider: ${provider}. Please add your API key in the settings.`);
+    throw new Error(`No API key found for provider: ${provider}. Please add your API key in the settings.`)
   }
 
   const genOptions = {
@@ -224,26 +318,24 @@ export const generateText = async (messages, options = {}) => {
 // Retry with exponential backoff
 export const generateWithRetry = async (messages, options = {}, maxRetries = 3) => {
   let lastError
-  
+
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await generateText(messages, options)
     } catch (error) {
       lastError = error
-      
-      // Don't retry on authentication errors
-      if (error.message.includes('API key') || error.message.includes('401')) {
+
+      if (error.message.includes('API key') || error.message.includes('401') || error.message.includes('403')) {
         throw error
       }
-      
-      // Exponential backoff
+
       if (i < maxRetries - 1) {
-        const delay = Math.pow(2, i) * 1000
-        await new Promise(resolve => setTimeout(resolve, delay))
+        const retryDelay = Number(error.retryAfterMs) || Math.pow(2, i) * 1000
+        await new Promise((resolve) => setTimeout(resolve, retryDelay))
       }
     }
   }
-  
+
   throw lastError
 }
 

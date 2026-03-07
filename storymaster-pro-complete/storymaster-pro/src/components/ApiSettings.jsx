@@ -5,13 +5,24 @@ import { Label } from '@/components/ui/label.jsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog.jsx'
 import { Settings, Key, Sparkles, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
-import { getApiKeys, saveApiKeys, getApiSettings, saveApiSettings, fetchOpenRouterModels, API_PROVIDERS } from '../services/apiService'
+import {
+  getApiKeys,
+  saveApiKeys,
+  getApiSettings,
+  saveApiSettings,
+  fetchOpenRouterModels,
+  fetchOpenRouterFreeModels,
+  validateProviderConnection,
+  API_PROVIDERS,
+  getDefaultModelForProvider,
+} from '../services/apiService'
 
 export function ApiSettings({ isOpen, onClose, language = 'en' }) {
   const [apiKeys, setApiKeys] = useState({})
   const [settings, setSettings] = useState({})
   const [models, setModels] = useState([])
   const [loadingModels, setLoadingModels] = useState(false)
+  const [testingConnection, setTestingConnection] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState(null)
 
   const translations = {
@@ -23,7 +34,9 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
       model: 'Model',
       temperature: 'Temperature',
       save: 'Save Settings',
+      testConnection: 'Test Connection',
       loadModels: 'Load Models',
+      loadFreeModels: 'Load Free Models',
       openrouter: 'OpenRouter (Recommended)',
       google: 'Google Gemini',
       deepseek: 'DeepSeek',
@@ -31,6 +44,7 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
       enterKey: 'Enter your API key',
       selectModel: 'Select a model',
       modelsFetched: 'models available',
+      freeModelsFetched: 'free models available',
       getApiKey: 'Get API Key',
       openrouterInfo: 'OpenRouter gives you access to 100+ models including GPT-4, Claude, Gemini, and more.',
       securityNote: 'Your API keys are stored locally in your browser and never sent to our servers.'
@@ -43,7 +57,9 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
       model: 'מודל',
       temperature: 'טמפרטורה',
       save: 'שמור הגדרות',
+      testConnection: 'בדוק חיבור',
       loadModels: 'טען מודלים',
+      loadFreeModels: 'טען מודלים חינמיים',
       openrouter: 'OpenRouter (מומלץ)',
       google: 'Google Gemini',
       deepseek: 'DeepSeek',
@@ -51,6 +67,7 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
       enterKey: 'הזן את מפתח ה-API שלך',
       selectModel: 'בחר מודל',
       modelsFetched: 'מודלים זמינים',
+      freeModelsFetched: 'מודלים חינמיים זמינים',
       getApiKey: 'קבל מפתח API',
       openrouterInfo: 'OpenRouter נותן לך גישה ל-100+ מודלים כולל GPT-4, Claude, Gemini ועוד.',
       securityNote: 'מפתחות ה-API שלך נשמרים מקומית בדפדפן שלך ולעולם לא נשלחים לשרתים שלנו.'
@@ -60,60 +77,20 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
   const t = translations[language]
 
   useEffect(() => {
+    const loadedSettings = getApiSettings()
+    const provider = loadedSettings.provider || API_PROVIDERS.OPENROUTER
+
     setApiKeys(getApiKeys())
-    setSettings(getApiSettings())
+    setSettings({
+      ...loadedSettings,
+      provider,
+      model: loadedSettings.model || getDefaultModelForProvider(provider)
+    })
   }, [])
-
-  const handleProviderChange = (provider) => {
-    setSettings({ ...settings, provider })
-    setModels([])
-    setConnectionStatus(null)
-  }
-
-  const handleApiKeyChange = (provider, key) => {
-    const newKeys = { ...apiKeys, [provider]: key }
-    setApiKeys(newKeys)
-    saveApiKeys(newKeys)
-  }
-
-  const handleLoadModels = async () => {
-    if (!apiKeys[settings.provider]) {
-      alert('Please enter an API key first')
-      return
-    }
-
-    if (settings.provider !== API_PROVIDERS.OPENROUTER) {
-      alert('Model loading is only available for OpenRouter')
-      return
-    }
-
-    setLoadingModels(true)
-    try {
-      const fetchedModels = await fetchOpenRouterModels(apiKeys[settings.provider])
-      setModels(fetchedModels)
-      setConnectionStatus({ success: true, message: `${fetchedModels.length} ${t.modelsFetched}` })
-    } catch (error) {
-      setConnectionStatus({ success: false, message: error.message })
-    } finally {
-      setLoadingModels(false)
-    }
-  }
-
-  const handleSave = () => {
-    saveApiSettings(settings)
-    onClose()
-  }
-
-  const providerLinks = {
-    [API_PROVIDERS.OPENROUTER]: 'https://openrouter.ai/keys',
-    [API_PROVIDERS.GOOGLE]: 'https://makersuite.google.com/app/apikey',
-    [API_PROVIDERS.DEEPSEEK]: 'https://platform.deepseek.com/api_keys',
-    [API_PROVIDERS.MISTRAL]: 'https://console.mistral.ai/api-keys'
-  }
 
   const defaultModels = {
     [API_PROVIDERS.OPENROUTER]: [
-      { id: 'x-ai/grok-2-1212', name: 'Grok 2' },
+      { id: 'openrouter/auto', name: 'OpenRouter Auto (Recommended)' },
       { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
       { id: 'openai/gpt-4-turbo', name: 'GPT-4 Turbo' },
       { id: 'google/gemini-2.0-flash-exp:free', name: 'Gemini 2.0 Flash (Free)' },
@@ -132,6 +109,88 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
     ]
   }
 
+  const handleProviderChange = (provider) => {
+    setSettings({
+      ...settings,
+      provider,
+      model: getDefaultModelForProvider(provider)
+    })
+    setModels([])
+    setConnectionStatus(null)
+  }
+
+  const handleApiKeyChange = (provider, key) => {
+    const newKeys = { ...apiKeys, [provider]: key }
+    setApiKeys(newKeys)
+    saveApiKeys(newKeys)
+  }
+
+  const loadModelsFromOpenRouter = async (fetcher, statusLabel) => {
+    if (!apiKeys[settings.provider]) {
+      alert('Please enter an API key first')
+      return
+    }
+
+    if (settings.provider !== API_PROVIDERS.OPENROUTER) {
+      alert('Model loading is only available for OpenRouter')
+      return
+    }
+
+    setLoadingModels(true)
+    setConnectionStatus(null)
+
+    try {
+      const fetchedModels = await fetcher(apiKeys[settings.provider])
+      setModels(fetchedModels)
+      setConnectionStatus({ success: true, message: `${fetchedModels.length} ${statusLabel}` })
+    } catch (error) {
+      setConnectionStatus({ success: false, message: error.message })
+    } finally {
+      setLoadingModels(false)
+    }
+  }
+
+  const handleLoadModels = async () => {
+    await loadModelsFromOpenRouter(fetchOpenRouterModels, t.modelsFetched)
+  }
+
+  const handleLoadFreeModels = async () => {
+    await loadModelsFromOpenRouter(fetchOpenRouterFreeModels, t.freeModelsFetched)
+  }
+
+  const handleTestConnection = async () => {
+    const apiKey = apiKeys[settings.provider]
+
+    if (!apiKey) {
+      alert('Please enter an API key first')
+      return
+    }
+
+    setTestingConnection(true)
+    setConnectionStatus(null)
+
+    try {
+      await validateProviderConnection(settings.provider, apiKey, settings.model)
+      setConnectionStatus({ success: true, message: language === 'en' ? 'Connection successful' : 'החיבור הצליח' })
+    } catch (error) {
+      setConnectionStatus({ success: false, message: error.message })
+    } finally {
+      setTestingConnection(false)
+    }
+  }
+
+  const handleSave = () => {
+    saveApiSettings(settings)
+    onClose()
+  }
+
+  const providerLinks = {
+    [API_PROVIDERS.OPENROUTER]: 'https://openrouter.ai/keys',
+    [API_PROVIDERS.GOOGLE]: 'https://makersuite.google.com/app/apikey',
+    [API_PROVIDERS.DEEPSEEK]: 'https://platform.deepseek.com/api_keys',
+    [API_PROVIDERS.MISTRAL]: 'https://console.mistral.ai/api-keys'
+  }
+
   const availableModels = models.length > 0 ? models : (defaultModels[settings.provider] || [])
 
   return (
@@ -148,13 +207,11 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
         </DialogHeader>
 
         <div className="space-y-6 mt-4">
-          {/* Security Note */}
           <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 flex items-start gap-3">
             <Key className="w-5 h-5 text-blue-400 mt-0.5" />
             <p className="text-sm text-blue-300">{t.securityNote}</p>
           </div>
 
-          {/* Provider Selection */}
           <div className="space-y-2">
             <Label className="text-white">{t.provider}</Label>
             <Select value={settings.provider} onValueChange={handleProviderChange}>
@@ -168,13 +225,12 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
                 <SelectItem value={API_PROVIDERS.MISTRAL}>{t.mistral}</SelectItem>
               </SelectContent>
             </Select>
-            
+
             {settings.provider === API_PROVIDERS.OPENROUTER && (
               <p className="text-sm text-gray-400 mt-2">{t.openrouterInfo}</p>
             )}
           </div>
 
-          {/* API Key Input */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-white">{t.apiKey}</Label>
@@ -196,42 +252,45 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
             />
           </div>
 
-          {/* Load Models Button (OpenRouter only) */}
           {settings.provider === API_PROVIDERS.OPENROUTER && (
-            <Button
-              onClick={handleLoadModels}
-              disabled={!apiKeys[settings.provider] || loadingModels}
-              className="w-full bg-purple-600 hover:bg-purple-700"
-            >
-              {loadingModels ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Loading...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  {t.loadModels}
-                </>
-              )}
-            </Button>
+            <div className="grid md:grid-cols-2 gap-3">
+              <Button
+                onClick={handleLoadModels}
+                disabled={!apiKeys[settings.provider] || loadingModels}
+                className="w-full bg-purple-600 hover:bg-purple-700"
+              >
+                {loadingModels ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Loading...</> : <><Sparkles className="w-4 h-4 mr-2" />{t.loadModels}</>}
+              </Button>
+
+              <Button
+                onClick={handleLoadFreeModels}
+                disabled={!apiKeys[settings.provider] || loadingModels}
+                variant="outline"
+                className="w-full border-white/20 hover:bg-white/10"
+              >
+                {loadingModels ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Loading...</> : <><Sparkles className="w-4 h-4 mr-2" />{t.loadFreeModels}</>}
+              </Button>
+            </div>
           )}
 
-          {/* Connection Status */}
+          <Button
+            onClick={handleTestConnection}
+            disabled={!apiKeys[settings.provider] || testingConnection}
+            variant="outline"
+            className="w-full border-white/20 hover:bg-white/10"
+          >
+            {testingConnection ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Loading...</> : t.testConnection}
+          </Button>
+
           {connectionStatus && (
             <div className={`flex items-center gap-2 p-3 rounded-lg ${
               connectionStatus.success ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
             }`}>
-              {connectionStatus.success ? (
-                <CheckCircle className="w-5 h-5" />
-              ) : (
-                <AlertCircle className="w-5 h-5" />
-              )}
+              {connectionStatus.success ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
               <span className="text-sm">{connectionStatus.message}</span>
             </div>
           )}
 
-          {/* Model Selection */}
           <div className="space-y-2">
             <Label className="text-white">{t.model}</Label>
             <Select value={settings.model} onValueChange={(value) => setSettings({ ...settings, model: value })}>
@@ -248,7 +307,6 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
             </Select>
           </div>
 
-          {/* Advanced Settings */}
           <div className="grid grid-cols-1 gap-4">
             <div className="space-y-2">
               <Label className="text-white">{t.temperature}</Label>
@@ -264,7 +322,6 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
             </div>
           </div>
 
-          {/* Save Button */}
           <Button
             onClick={handleSave}
             className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-6"
@@ -276,4 +333,3 @@ export function ApiSettings({ isOpen, onClose, language = 'en' }) {
     </Dialog>
   )
 }
-
