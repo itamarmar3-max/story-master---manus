@@ -11,21 +11,39 @@ const throwIfGenerationAborted = (options = {}) => {
 }
 
 const parseJsonFromResponse = (response, label = 'AI JSON') => {
-  const markdownMatch = response.match(/```json\s*([\s\S]*?)\s*```/)
-  const contentToParse = markdownMatch ? markdownMatch[1] : response
+  // 1. Try to find content within any markdown JSON block first
+  const markdownMatches = [...response.matchAll(/```json\s*([\s\S]*?)\s*```/g)]
+  let candidates = markdownMatches.map(m => m[1])
 
-  const startIndex = contentToParse.indexOf('{')
-  const endIndex = contentToParse.lastIndexOf('}')
-
-  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
-    throw new Error(`${label}: no valid JSON object found`)
+  // 2. If no markdown blocks, treat the entire response as a candidate
+  if (candidates.length === 0) {
+    candidates = [response]
   }
 
-  const jsonString = contentToParse
-    .substring(startIndex, endIndex + 1)
-    .replace(/,\s*([}\]])/g, '$1')
+  // 3. Try to extract the largest {...} or [...] object/array from each candidate
+  for (const text of candidates) {
+    const startObj = text.indexOf('{')
+    const startArr = text.indexOf('[')
+    const startIndex = (startObj !== -1 && (startArr === -1 || startObj < startArr)) ? startObj : startArr
 
-  return JSON.parse(jsonString)
+    const endObj = text.lastIndexOf('}')
+    const endArr = text.lastIndexOf(']')
+    const endIndex = (endObj !== -1 && (endArr === -1 || endObj > endArr)) ? endObj : endArr
+
+    if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+      const jsonString = text
+        .substring(startIndex, endIndex + 1)
+        .replace(/,\s*([}\]])/g, '$1') // Remove trailing commas
+
+      try {
+        return JSON.parse(jsonString)
+      } catch (e) {
+        console.warn(`Failed to parse candidate JSON from ${label}:`, e)
+      }
+    }
+  }
+
+  throw new Error(`${label}: No valid JSON object or array found in response`)
 }
 
 const requestJson = async (prompt, options = {}, label = 'AI JSON') => {
