@@ -235,12 +235,17 @@ const generateWithOpenRouter = async (apiKey, model, messages, options = {}) => 
   }
 
   const executeRequest = async (body) => {
+    // Ensure Referer is set, fallback to a generic one if origin is unavailable
+    const referer = (typeof window !== 'undefined' && window.location?.origin)
+      ? window.location.origin
+      : 'https://storymaster-pro.pages.dev'
+
     const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': window.location.origin,
+        'HTTP-Referer': referer,
         'X-Title': 'StoryMaster Pro'
       },
       body: JSON.stringify(body)
@@ -254,14 +259,37 @@ const generateWithOpenRouter = async (apiKey, model, messages, options = {}) => 
     return extractTextOrThrow(data.choices?.[0]?.message?.content, 'OpenRouter API Error')
   }
 
-  const retries = [requestBody]
+  const flattenMessages = (msgs) => {
+    const systemMsg = msgs.find(m => m.role === 'system')
+    if (!systemMsg) return msgs
 
-  if (requestBody.max_tokens !== undefined) {
-    const withoutMaxTokens = { ...requestBody }
-    delete withoutMaxTokens.max_tokens
-    retries.push(withoutMaxTokens)
+    const otherMsgs = msgs.filter(m => m.role !== 'system')
+    if (otherMsgs.length > 0 && otherMsgs[0].role === 'user') {
+      const newMessages = [...otherMsgs]
+      newMessages[0] = {
+        ...newMessages[0],
+        content: `Instructions: ${systemMsg.content}\n\nUser Input: ${newMessages[0].content}`
+      }
+      return newMessages
+    }
+    return otherMsgs
   }
 
+  const retries = [requestBody]
+
+  // Compatibility attempt 1: Flatten messages (some models like Venice or older ones via OpenRouter struggle with 'system')
+  retries.push({
+    ...requestBody,
+    messages: flattenMessages(messages)
+  })
+
+  // Compatibility attempt 2: Without max_tokens (some providers have strict range limits or don't support it)
+  if (requestBody.max_tokens !== undefined) {
+    retries.push({ ...requestBody, max_tokens: undefined })
+    retries.push({ ...requestBody, messages: flattenMessages(messages), max_tokens: undefined })
+  }
+
+  // Fallback to a known reliable free model if it was the default "auto" model that failed
   if (requestedModel === DEFAULT_OPENROUTER_MODEL) {
     retries.push({
       ...requestBody,
@@ -291,9 +319,15 @@ const generateWithOpenRouter = async (apiKey, model, messages, options = {}) => 
     } catch (error) {
       lastError = error
 
-      if (!isOpenRouterProviderFailure(error?.message)) {
+      // Only continue retrying if it's a model/provider specific error (400, 422, 5xx)
+      // If it's 401/403 (Auth), we stop immediately.
+      const msg = error.message?.toLowerCase() || ''
+      if (msg.includes('401') || msg.includes('403') || msg.includes('api key')) {
         break
       }
+
+      // If it's a provider error or a potential formatting error, try next retry candidate
+      continue
     }
   }
 
