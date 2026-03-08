@@ -8,21 +8,39 @@ const MEMORY_FALLBACK = {
 }
 
 const sanitizeJson = (text) => {
-  const markdownMatch = text.match(/```json\s*([\s\S]*?)\s*```/)
-  const source = (markdownMatch ? markdownMatch[1] : text).trim()
+  // 1. Try to find content within any markdown JSON block first
+  const markdownMatches = [...text.matchAll(/```json\s*([\s\S]*?)\s*```/g)]
+  let candidates = markdownMatches.map(m => m[1])
 
-  const start = source.indexOf('{')
-  const end = source.lastIndexOf('}')
-
-  if (start === -1 || end === -1 || end <= start) {
-    throw new Error('No valid JSON object in memory response')
+  // 2. If no markdown blocks, treat the entire response as a candidate
+  if (candidates.length === 0) {
+    candidates = [text]
   }
 
-  const normalized = source
-    .slice(start, end + 1)
-    .replace(/,\s*([}\]])/g, '$1')
+  // 3. Try to extract the largest {...} or [...] object/array from each candidate
+  for (const candidateText of candidates) {
+    const startObj = candidateText.indexOf('{')
+    const startArr = candidateText.indexOf('[')
+    const startIndex = (startObj !== -1 && (startArr === -1 || startObj < startArr)) ? startObj : startArr
 
-  return JSON.parse(normalized)
+    const endObj = candidateText.lastIndexOf('}')
+    const endArr = candidateText.lastIndexOf(']')
+    const endIndex = (endObj !== -1 && (endArr === -1 || endObj > endArr)) ? endObj : endArr
+
+    if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+      const jsonString = candidateText
+        .substring(startIndex, endIndex + 1)
+        .replace(/,\s*([}\]])/g, '$1') // Remove trailing commas
+
+      try {
+        return JSON.parse(jsonString)
+      } catch (e) {
+        console.warn('Failed to parse candidate JSON in storyMemoryService:', e)
+      }
+    }
+  }
+
+  throw new Error('No valid JSON object or array found in memory response')
 }
 
 export const createInitialMemoryState = (premise, config) => ({

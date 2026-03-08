@@ -56,22 +56,24 @@ const resolveModelForProvider = (provider, requestedModel) => {
   return getDefaultModelForProvider(provider)
 }
 
-const safeJson = async (response) => {
-  const text = await response.text()
-  if (!text) {
-    return {}
-  }
-
-  try {
-    return JSON.parse(text)
-  } catch {
-    return { message: text }
-  }
-}
-
 const readApiError = async (response, fallbackLabel = 'API Error') => {
-  const payload = await safeJson(response)
-  return payload.error?.message || payload.message || `${fallbackLabel}: ${response.status} ${response.statusText}`
+  try {
+    const cloned = response.clone()
+    const payload = await cloned.json()
+    return (
+      payload.error?.message ||
+      payload.message ||
+      (typeof payload.error === 'string' ? payload.error : null) ||
+      `${fallbackLabel}: ${response.status} ${response.statusText}`
+    )
+  } catch {
+    try {
+      const text = await response.text()
+      return text || `${fallbackLabel}: ${response.status} ${response.statusText}`
+    } catch {
+      return `${fallbackLabel}: ${response.status} ${response.statusText}`
+    }
+  }
 }
 
 const extractTextOrThrow = (value, label) => {
@@ -303,24 +305,34 @@ const generateWithOpenRouter = async (apiKey, model, messages, options = {}) => 
 // Generate text using Google Gemini
 const generateWithGoogle = async (apiKey, model, messages, options = {}) => {
   try {
-    const contents = messages.map((msg) => ({
+    const systemMessage = messages.find((m) => m.role === 'system')
+    const userMessages = messages.filter((m) => m.role !== 'system')
+
+    const contents = userMessages.map((msg) => ({
       role: msg.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: msg.content }]
     }))
 
-    const response = await fetch(`${GOOGLE_BASE_URL}/models/${model}:generateContent`, {
+    const body = {
+      contents,
+      generationConfig: {
+        temperature: options.temperature ?? 0.8,
+        maxOutputTokens: options.maxTokens
+      }
+    }
+
+    if (systemMessage) {
+      body.system_instruction = {
+        parts: [{ text: systemMessage.content }]
+      }
+    }
+
+    const response = await fetch(`${GOOGLE_BASE_URL}/models/${model}:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        contents,
-        generationConfig: {
-          temperature: options.temperature ?? 0.8,
-          maxOutputTokens: options.maxTokens
-        }
-      })
+      body: JSON.stringify(body)
     })
 
     if (!response.ok) {
@@ -353,7 +365,11 @@ const generateWithDeepSeek = async (apiKey, model, messages, options = {}) => {
     })
 
     if (!response.ok) {
-      throw new Error(await readApiError(response, 'DeepSeek API Error'))
+      const errorMsg = await readApiError(response, 'DeepSeek API Error')
+      if (response.status === 405 || errorMsg.toLowerCase().includes('cors')) {
+        throw new Error(`DeepSeek API Error: Direct browser calls are often blocked by CORS. Consider using OpenRouter instead. Original error: ${errorMsg}`)
+      }
+      throw new Error(errorMsg)
     }
 
     const data = await response.json()
@@ -382,7 +398,11 @@ const generateWithMistral = async (apiKey, model, messages, options = {}) => {
     })
 
     if (!response.ok) {
-      throw new Error(await readApiError(response, 'Mistral API Error'))
+      const errorMsg = await readApiError(response, 'Mistral API Error')
+      if (response.status === 405 || errorMsg.toLowerCase().includes('cors')) {
+        throw new Error(`Mistral API Error: Direct browser calls are often blocked by CORS. Consider using OpenRouter instead. Original error: ${errorMsg}`)
+      }
+      throw new Error(errorMsg)
     }
 
     const data = await response.json()
