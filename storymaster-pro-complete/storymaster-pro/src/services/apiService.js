@@ -84,6 +84,28 @@ const isOpenRouterProviderFailure = (message = '') => {
   return normalized.includes('provider returned error') || normalized.includes('no endpoints found')
 }
 
+const formatSuggestedModels = (models = []) => models.slice(0, 3).map((model) => model.id).join(', ')
+
+const buildOpenRouterProviderDiagnostic = async (apiKey, selectedModel, originalError) => {
+  try {
+    const models = await fetchOpenRouterFreeModels(apiKey)
+    const suggested = formatSuggestedModels(models)
+
+    return (
+      `Model "${selectedModel}" is currently unavailable on OpenRouter providers (this is usually a provider-side outage/capacity issue, not an account-credit issue). ` +
+      'Your API key is valid because model discovery succeeded. ' +
+      `${suggested ? `Try one of these currently free models: ${suggested}. ` : ''}` +
+      `Original error: ${originalError.message}`
+    )
+  } catch {
+    return (
+      `Model "${selectedModel}" is currently unavailable on OpenRouter providers. ` +
+      'This may be a provider-side outage or temporary routing issue. ' +
+      `Original error: ${originalError.message}`
+    )
+  }
+}
+
 const enrichOpenRouterErrorMessage = (error, model) => {
   if (!error?.message) {
     return error
@@ -95,7 +117,7 @@ const enrichOpenRouterErrorMessage = (error, model) => {
 
   const enriched = new Error(
     `OpenRouter provider error for model "${model}". ` +
-    'Try selecting a different model (preferably a :free model), verify your OpenRouter balance/credits, and test connection again. ' +
+    'This is usually caused by model/provider availability or routing issues (not necessarily credits). Try another model and test again. ' +
     `Original error: ${error.message}`
   )
   enriched.cause = error
@@ -170,13 +192,24 @@ export const fetchOpenRouterFreeModels = async (apiKey) => {
 export const validateProviderConnection = async (provider, apiKey, model) => {
   const pingMessages = [{ role: 'user', content: 'Reply with the single word: OK' }]
 
-  const result = await generateText(pingMessages, {
-    provider,
-    apiKey,
-    model,
-    maxTokens: 16,
-    temperature: 0,
-  })
+  let result
+  try {
+    result = await generateText(pingMessages, {
+      provider,
+      apiKey,
+      model,
+      maxTokens: 16,
+      temperature: 0,
+    })
+  } catch (error) {
+    const selectedModel = model || getDefaultModelForProvider(provider)
+
+    if (provider === API_PROVIDERS.OPENROUTER && isOpenRouterProviderFailure(error?.message)) {
+      throw new Error(await buildOpenRouterProviderDiagnostic(apiKey, selectedModel, error))
+    }
+
+    throw error
+  }
 
   return { ok: true, message: result }
 }
