@@ -84,6 +84,31 @@ const extractTextOrThrow = (value, label) => {
   return value
 }
 
+const flattenMessages = (messages) => {
+  const systemMessages = messages.filter((m) => m.role === 'system')
+  const otherMessages = messages.filter((m) => m.role !== 'system')
+
+  if (systemMessages.length === 0) return messages
+
+  const systemPrompt = systemMessages.map((m) => m.content).join('\n\n')
+
+  if (otherMessages.length === 0) return messages
+
+  if (otherMessages[0].role === 'user') {
+    const flattened = [...otherMessages]
+    flattened[0] = {
+      ...flattened[0],
+      content: `${systemPrompt}\n\n${flattened[0].content}`
+    }
+    return flattened
+  }
+
+  return [
+    { role: 'user', content: systemPrompt },
+    ...otherMessages
+  ]
+}
+
 const isOpenRouterProviderFailure = (message = '') => {
   const normalized = String(message).toLowerCase()
   return normalized.includes('provider returned error') || normalized.includes('no endpoints found')
@@ -92,39 +117,15 @@ const isOpenRouterProviderFailure = (message = '') => {
 const formatSuggestedModels = (models = []) => models.slice(0, 3).map((model) => model.id).join(', ')
 
 const buildOpenRouterProviderDiagnostic = async (apiKey, selectedModel, originalError) => {
-  try {
-    const models = await fetchOpenRouterFreeModels(apiKey)
-    const suggested = formatSuggestedModels(models)
-
-    return (
-      `Model "${selectedModel}" is currently unavailable on OpenRouter providers (this is usually a provider-side outage/capacity issue, not an account-credit issue). ` +
-      'Your API key is valid because model discovery succeeded. ' +
-      `${suggested ? `Try one of these currently free models: ${suggested}. ` : ''}` +
-      `Original error: ${originalError.message}`
-    )
-  } catch {
-    return (
-      `Model "${selectedModel}" is currently unavailable on OpenRouter providers. ` +
-      'This may be a provider-side outage or temporary routing issue. ' +
-      `Original error: ${originalError.message}`
-    )
-  }
+  return `Model "${selectedModel}" is currently unavailable on OpenRouter. Original error: ${originalError.message}`
 }
 
 const enrichOpenRouterErrorMessage = (error, model) => {
-  if (!error?.message) {
+  if (!error?.message || !isOpenRouterProviderFailure(error.message)) {
     return error
   }
 
-  if (!isOpenRouterProviderFailure(error.message)) {
-    return error
-  }
-
-  const enriched = new Error(
-    `OpenRouter provider error for model "${model}". ` +
-    'This is usually caused by model/provider availability or routing issues (not necessarily credits). Try another model and test again. ' +
-    `Original error: ${error.message}`
-  )
+  const enriched = new Error(`OpenRouter error for model "${model}": ${error.message}`)
   enriched.cause = error
   return enriched
 }
@@ -222,10 +223,11 @@ export const validateProviderConnection = async (provider, apiKey, model) => {
 // Generate text using OpenRouter
 const generateWithOpenRouter = async (apiKey, model, messages, options = {}) => {
   const requestedModel = model || DEFAULT_OPENROUTER_MODEL
+  const processedMessages = flattenMessages(messages)
 
   const requestBody = {
     model: requestedModel,
-    messages,
+    messages: processedMessages,
     temperature: options.temperature ?? 0.8,
     stream: false
   }
