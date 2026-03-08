@@ -13,6 +13,7 @@ const GOOGLE_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
 const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1'
 const MISTRAL_BASE_URL = 'https://api.mistral.ai/v1'
 const DEFAULT_OPENROUTER_MODEL = 'openrouter/auto'
+const OPENROUTER_FALLBACK_MODEL = 'google/gemini-2.0-flash-exp:free'
 
 const DEFAULT_MODELS_BY_PROVIDER = {
   [API_PROVIDERS.OPENROUTER]: DEFAULT_OPENROUTER_MODEL,
@@ -76,6 +77,29 @@ const extractTextOrThrow = (value, label) => {
   }
 
   return value
+}
+
+const isOpenRouterProviderFailure = (message = '') => {
+  const normalized = String(message).toLowerCase()
+  return normalized.includes('provider returned error') || normalized.includes('no endpoints found')
+}
+
+const enrichOpenRouterErrorMessage = (error, model) => {
+  if (!error?.message) {
+    return error
+  }
+
+  if (!isOpenRouterProviderFailure(error.message)) {
+    return error
+  }
+
+  const enriched = new Error(
+    `OpenRouter provider error for model "${model}". ` +
+    'Try selecting a different model (preferably a :free model), verify your OpenRouter balance/credits, and test connection again. ' +
+    `Original error: ${error.message}`
+  )
+  enriched.cause = error
+  return enriched
 }
 
 // Get API keys from localStorage
@@ -165,8 +189,11 @@ const generateWithOpenRouter = async (apiKey, model, messages, options = {}) => 
     model: requestedModel,
     messages,
     temperature: options.temperature ?? 0.8,
-    max_tokens: options.maxTokens,
     stream: false
+  }
+
+  if (typeof options.maxTokens === 'number') {
+    requestBody.max_tokens = options.maxTokens
   }
 
   const executeRequest = async (body) => {
@@ -189,12 +216,38 @@ const generateWithOpenRouter = async (apiKey, model, messages, options = {}) => 
     return extractTextOrThrow(data.choices?.[0]?.message?.content, 'OpenRouter API Error')
   }
 
-  try {
-    return await executeRequest(requestBody)
-  } catch (error) {
-    console.error('OpenRouter API Error:', error)
-    throw error
+  const retries = [requestBody]
+
+  if (requestBody.max_tokens !== undefined) {
+    const withoutMaxTokens = { ...requestBody }
+    delete withoutMaxTokens.max_tokens
+    retries.push(withoutMaxTokens)
   }
+
+  if (requestedModel === DEFAULT_OPENROUTER_MODEL) {
+    retries.push({
+      ...requestBody,
+      model: OPENROUTER_FALLBACK_MODEL,
+    })
+  }
+
+  let lastError
+
+  for (const candidateBody of retries) {
+    try {
+      return await executeRequest(candidateBody)
+    } catch (error) {
+      lastError = error
+
+      if (!isOpenRouterProviderFailure(error?.message)) {
+        break
+      }
+    }
+  }
+
+  const finalError = enrichOpenRouterErrorMessage(lastError, requestedModel)
+  console.error('OpenRouter API Error:', finalError)
+  throw finalError
 }
 
 // Generate text using Google Gemini
