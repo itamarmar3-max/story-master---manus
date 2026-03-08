@@ -13,11 +13,11 @@ const GOOGLE_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
 const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1'
 const MISTRAL_BASE_URL = 'https://api.mistral.ai/v1'
 const DEFAULT_OPENROUTER_MODEL = 'openrouter/auto'
-const OPENROUTER_FALLBACK_MODEL = 'google/gemini-2.0-flash-exp:free'
+const OPENROUTER_FALLBACK_MODEL = 'google/gemini-2.0-flash-001:free'
 
 const DEFAULT_MODELS_BY_PROVIDER = {
   [API_PROVIDERS.OPENROUTER]: DEFAULT_OPENROUTER_MODEL,
-  [API_PROVIDERS.GOOGLE]: 'gemini-2.0-flash-exp',
+  [API_PROVIDERS.GOOGLE]: 'gemini-2.0-flash',
   [API_PROVIDERS.DEEPSEEK]: 'deepseek-chat',
   [API_PROVIDERS.MISTRAL]: 'mistral-large-latest'
 }
@@ -44,7 +44,10 @@ const isModelCompatibleWithProvider = (provider, model) => {
 const resolveModelForProvider = (provider, requestedModel) => {
   if (requestedModel) {
     if (!isModelCompatibleWithProvider(provider, requestedModel)) {
-      throw new Error(`Selected model "${requestedModel}" is not compatible with provider "${provider}".`)
+      console.warn(
+        `Selected model "${requestedModel}" is not compatible with provider "${provider}". Falling back to provider default model.`
+      )
+      return getDefaultModelForProvider(provider)
     }
 
     return requestedModel
@@ -262,6 +265,20 @@ const generateWithOpenRouter = async (apiKey, model, messages, options = {}) => 
       ...requestBody,
       model: OPENROUTER_FALLBACK_MODEL,
     })
+
+    try {
+      const freeModels = await fetchOpenRouterFreeModels(apiKey)
+      const firstAvailableFreeModel = freeModels[0]?.id
+
+      if (firstAvailableFreeModel && firstAvailableFreeModel !== OPENROUTER_FALLBACK_MODEL) {
+        retries.push({
+          ...requestBody,
+          model: firstAvailableFreeModel,
+        })
+      }
+    } catch (error) {
+      console.warn('Unable to load dynamic OpenRouter fallback models:', error)
+    }
   }
 
   let lastError
